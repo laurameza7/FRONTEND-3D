@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UCC Pasto 3D</title>
+  <meta name="description" content="Mapa 3D del campus Pasto de la Universidad Cooperativa de Colombia con asistente de IA." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23004d99'/><path d='M8 22V12l8-4 8 4v10' stroke='white' stroke-width='2.5' fill='none'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="escena"></div>
+
+  <!-- Encabezado y buscador -->
+  <header class="tarjeta encabezado">
+    <div class="marca">
+      <span class="logo">UCC</span>
+      <div>
+        <h1>Campus Pasto 3D</h1>
+        <p>Universidad Cooperativa de Colombia</p>
+      </div>
+    </div>
+    <div class="buscador">
+      <input id="buscar" type="search" placeholder="Buscar bloque, oficina o programa…" autocomplete="off" />
+      <ul id="resultados" class="resultados" hidden></ul>
+    </div>
+    <div id="estado" class="estado"><span class="punto"></span><span class="texto">Conectando…</span></div>
+  </header>
+
+  <!-- Panel de información del bloque seleccionado -->
+  <aside id="panel" class="tarjeta panel" hidden>
+    <button id="cerrar-panel" class="icono" aria-label="Cerrar">✕</button>
+    <div id="panel-contenido"></div>
+  </aside>
+
+  <!-- Asistente con IA -->
+  <section id="chat" class="tarjeta chat">
+    <button id="chat-cabecera" class="chat-cabecera">
+      <span class="avatar">C</span>
+      <span class="titulo-chat"><strong>Coopi</strong><small>Asistente con IA del campus</small></span>
+      <span class="flecha">▾</span>
+    </button>
+    <div class="chat-cuerpo">
+      <div id="mensajes" class="mensajes"></div>
+      <div id="sugerencias" class="sugerencias"></div>
+      <form id="form-chat" class="form-chat">
+        <input id="pregunta" maxlength="500" placeholder="Escribe tu pregunta…" autocomplete="off" />
+        <button type="submit" aria-label="Enviar">➤</button>
+      </form>
+    </div>
+  </section>
+
+  <p class="ayuda">Arrastra para girar · Rueda para acercar · Clic en un bloque para ver detalles</p>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
