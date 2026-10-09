@@ -186,3 +186,6 @@ $('#btn-vista').addEventListener('click', () => {
 });
 
 cargarDatos();
+
+
+
