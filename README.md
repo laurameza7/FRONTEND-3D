@@ -27,3 +27,5 @@ npm run dev
 1. Importar este repositorio en https://vercel.com/new (framework: **Vite**).
 2. En *Environment Variables* agregar `VITE_API_URL` = URL del backend en Render.
 3. Deploy. Cada push a `main` se publica automáticamente.
+
+
