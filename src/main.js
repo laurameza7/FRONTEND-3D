@@ -24,8 +24,9 @@ async function cargarDatos() {
       const [edificios, lugares, programas] = await Promise.all([api.edificios(), api.lugares(), api.programas()]);
       clearTimeout(aviso);
       Object.assign(datos, { edificios, lugares, programas });
-      campus.cargar(edificios);
-      estado('ok', `En línea · ${edificios.length} bloques · ${programas.length} programas`);
+      campus.cargar(edificios, lugares);
+      const bloques = edificios.filter(e => e.tipo === 'EDIFICIO').length;
+      estado('ok', `En línea · ${bloques} bloques · ${programas.length} programas`);
       return;
     } catch {
       await new Promise(r => setTimeout(r, 5000));
@@ -43,17 +44,37 @@ function mostrarEdificio(id) {
   const lugares = datos.lugares.filter(l => l.edificioId === id);
   const programas = datos.programas.filter(p => p.edificioId === id);
 
+  const chips = e.tipo === 'EDIFICIO'
+    ? `<span class="etiqueta" style="background:${esc(e.color)}">${e.pisos} pisos</span>
+       ${e.sotanos ? `<span class="etiqueta" style="background:#4f6d8f">${e.sotanos} sótanos</span>` : ''}`
+    : `<span class="etiqueta" style="background:#7b8a97">${e.tipo === 'ACCESO' ? 'Entrada' : 'Zona abierta'}</span>`;
+
+  // Pisos de arriba hacia abajo, incluidos los sótanos
+  let pisosHtml = '';
+  if (e.tipo === 'EDIFICIO') {
+    const niveles = [];
+    for (let p = e.pisos; p >= 1; p--) niveles.push(p);
+    for (let s = 1; s <= (e.sotanos || 0); s++) niveles.push(-s);
+    pisosHtml = `<h3>Piso por piso</h3><div class="pisos">${niveles.map(p => {
+      const aqui = lugares.filter(l => l.piso === p || (l.nombre === 'Biblioteca' && p === 3 && l.piso === 2));
+      return `<div class="piso ${p < 0 ? 'sotano' : ''}"><b>${p < 0 ? 'Sótano ' + -p : 'Piso ' + p}</b>
+        <div class="contenido ${aqui.length ? '' : 'vacio'}">${aqui.length
+          ? aqui.map(l => `<div><strong>${esc(l.nombre)}</strong>${l.telefono ? `<span>☎ ${esc(l.telefono)}</span>` : ''}</div>`).join('')
+          : 'Sin información registrada'}</div></div>`;
+    }).join('')}</div>`;
+  } else if (lugares.length) {
+    pisosHtml = `<h3>Qué encuentras aquí</h3>${lugares.map(l => `
+      <div class="lugar"><strong>${esc(l.nombre)}</strong>${l.descripcion ? `<span>${esc(l.descripcion)}</span>` : ''}
+        ${l.telefono ? `<span>☎ ${esc(l.telefono)}</span>` : ''}</div>`).join('')}`;
+  }
+
   $('#panel-contenido').innerHTML = `
-    <span class="etiqueta" style="background:${esc(e.color)}">${e.pisos > 0 ? e.pisos + ' pisos' : 'Zona abierta'}</span>
+    <div class="chips">${chips}</div>
     <h2>${esc(e.nombre)}</h2>
     <p>${esc(e.descripcion)}</p>
-    ${lugares.length ? `<h3>Qué encuentras aquí</h3>${lugares.map(l => `
-      <div class="lugar"><strong>${esc(l.nombre)}</strong>
-        <span>Piso ${l.piso}${l.horario ? ' · ' + esc(l.horario) : ''}</span>
-        ${l.telefono ? `<span>☎ ${esc(l.telefono)}</span>` : ''}
-      </div>`).join('')}` : ''}
+    ${pisosHtml}
     ${programas.length ? `<h3>Programas con clases aquí</h3>${programas.map(p => `
-      <div class="lugar"><strong>${esc(p.nombre)}</strong><span>${p.duracionSemestres} semestres · ${esc(p.titulo)}</span></div>`).join('')}` : ''}
+      <div class="lugar"><strong>${esc(p.nombre)}</strong><span>${esc(p.titulo)}</span></div>`).join('')}` : ''}
   `;
   $('#panel').hidden = false;
 }
@@ -64,6 +85,7 @@ $('#cerrar-panel').addEventListener('click', () => {
 });
 
 /* ------------------------------------------------------------------ Buscador */
+const nombrePiso = (p) => (p < 0 ? `sótano ${-p}` : `piso ${p}`);
 const normalizar = (s) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 
 $('#buscar').addEventListener('input', (ev) => {
@@ -72,14 +94,14 @@ $('#buscar').addEventListener('input', (ev) => {
   if (q.length < 2) { lista.hidden = true; return; }
 
   const items = [
-    ...datos.edificios.map(e => ({ titulo: e.nombre, sub: 'Bloque', id: e.id })),
-    ...datos.lugares.map(l => ({ titulo: l.nombre, sub: `${l.edificio} · piso ${l.piso}`, id: l.edificioId })),
-    ...datos.programas.map(p => ({ titulo: p.nombre, sub: `Programa · ${p.edificio ?? ''}`, id: p.edificioId })),
+    ...datos.edificios.map(e => ({ titulo: e.nombre, sub: e.tipo === 'EDIFICIO' ? `${e.pisos} pisos · ${e.sotanos} sótanos` : 'Zona del campus', id: e.id })),
+    ...datos.lugares.map(l => ({ titulo: l.nombre, sub: `${l.edificio} · ${nombrePiso(l.piso)}`, id: l.edificioId })),
+    ...datos.programas.map(p => ({ titulo: p.nombre, sub: `Programa · ${p.facultad}`, id: p.edificioId, programa: p.nombre })),
   ].filter((i, n, todos) => normalizar(i.titulo).includes(q)
     && todos.findIndex(o => o.titulo === i.titulo && o.id === i.id) === n).slice(0, 8);
 
   lista.innerHTML = items.length
-    ? items.map(i => `<li data-id="${i.id}">${esc(i.titulo)}<small>${esc(i.sub)}</small></li>`).join('')
+    ? items.map(i => `<li data-id="${i.id ?? ''}" data-programa="${esc(i.programa ?? '')}">${esc(i.titulo)}<small>${esc(i.sub)}</small></li>`).join('')
     : '<li>Sin resultados. Pregúntale a Coopi 👉</li>';
   lista.hidden = false;
 });
@@ -87,13 +109,16 @@ $('#buscar').addEventListener('input', (ev) => {
 $('#resultados').addEventListener('click', (ev) => {
   const li = ev.target.closest('li[data-id]');
   if (!li) return;
-  mostrarEdificio(Number(li.dataset.id));
+  if (li.dataset.programa) {               // los programas no tienen bloque fijo: se le pregunta a Coopi
+    $('#chat').classList.remove('cerrado');
+    preguntar(`Háblame del programa ${li.dataset.programa}`);
+  } else if (li.dataset.id) mostrarEdificio(Number(li.dataset.id));
   $('#resultados').hidden = true;
   $('#buscar').value = '';
 });
 
 /* ------------------------------------------------------------------ Chat con la IA */
-const SUGERENCIAS = ['¿Qué programas hay?', '¿Dónde pago la matrícula?', 'Clínica odontológica', '¿Cómo me inscribo?'];
+const SUGERENCIAS = ['¿Qué programas hay?', '¿Dónde queda la biblioteca?', '¿Dónde está el auditorio?', '¿Cómo me inscribo?'];
 
 function agregarMensaje(texto, quien, edificioId) {
   const div = document.createElement('div');
@@ -146,6 +171,18 @@ $('#sugerencias').addEventListener('click', (ev) => {
 $('#chat-cabecera').addEventListener('click', () => $('#chat').classList.toggle('cerrado'));
 if (window.innerWidth < 760) $('#chat').classList.add('cerrado');
 
-agregarMensaje('¡Hola! Soy Coopi, el asistente del campus Pasto. Pregúntame por programas, oficinas, pagos o cómo llegar a un bloque. 😊', 'bot');
+agregarMensaje('¡Hola! Soy Coopi, el asistente del campus Pasto (Torobajo). Pregúntame por programas, la biblioteca, el auditorio, pagos o cómo llegar a un bloque. 😊', 'bot');
+
+/* ------------------------------------------------------------------ Controles de vista */
+$('#btn-sotanos').addEventListener('click', (ev) => {
+  const activo = campus.alternarSotanos();
+  ev.currentTarget.classList.toggle('activo', activo);
+  ev.currentTarget.textContent = activo ? 'Ocultar sótanos' : 'Ver sótanos';
+});
+$('#btn-vista').addEventListener('click', () => {
+  $('#panel').hidden = true;
+  campus.deseleccionar();
+  campus.vistaGeneral();
+});
 
 cargarDatos();
