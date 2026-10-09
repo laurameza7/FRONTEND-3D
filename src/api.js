@@ -19,3 +19,5 @@ export const api = {
   preguntar: (pregunta) =>
     pedir('/api/asistente/preguntar', { method: 'POST', body: JSON.stringify({ pregunta }) }),
 };
+
+
