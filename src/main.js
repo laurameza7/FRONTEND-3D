@@ -55,9 +55,10 @@ function mostrarEdificio(id) {
     const niveles = [];
     for (let p = e.pisos; p >= 1; p--) niveles.push(p);
     for (let s = 1; s <= (e.sotanos || 0); s++) niveles.push(-s);
+    const etiquetaNivel = (p) => p > 0 ? 'Piso ' + p : (e.codigo === 'B' && p === -1 ? 'Piso 0 · Sót. 1' : 'Sótano ' + -p);
     pisosHtml = `<h3>Piso por piso</h3><div class="pisos">${niveles.map(p => {
       const aqui = lugares.filter(l => l.piso === p || (l.nombre === 'Biblioteca' && p === 3 && l.piso === 2));
-      return `<div class="piso ${p < 0 ? 'sotano' : ''}"><b>${p < 0 ? 'Sótano ' + -p : 'Piso ' + p}</b>
+      return `<div class="piso ${p < 0 ? 'sotano' : ''}"><b>${etiquetaNivel(p)}</b>
         <div class="contenido ${aqui.length ? '' : 'vacio'}">${aqui.length
           ? aqui.map(l => `<div><strong>${esc(l.nombre)}</strong>${l.telefono ? `<span>☎ ${esc(l.telefono)}</span>` : ''}</div>`).join('')
           : 'Sin información registrada'}</div></div>`;
@@ -118,7 +119,7 @@ $('#resultados').addEventListener('click', (ev) => {
 });
 
 /* ------------------------------------------------------------------ Chat con la IA */
-const SUGERENCIAS = ['¿Qué programas hay?', '¿Dónde queda la biblioteca?', '¿Dónde está el auditorio?', '¿Cómo me inscribo?'];
+const SUGERENCIAS = ['¿Qué programas hay?', '¿Dónde queda la biblioteca?', '¿Dónde está la clínica odontológica?', '¿Cómo me inscribo?'];
 
 function agregarMensaje(texto, quien, edificioId) {
   const div = document.createElement('div');

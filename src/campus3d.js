@@ -9,10 +9,11 @@ import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRe
  */
 const ALTURA_PISO = 3.6;
 const ALTURA_SOTANO = 3.2;
+const SEPARACION_SOTANOS = 9;  // en la vista de sótanos los niveles se separan para leerlos
 const CALLE_18_Z = 40;     // eje de la Calle 18
 const CARRERA_45_X = 54;   // eje de la Carrera 45
 const VISTA_GENERAL = { camara: new THREE.Vector3(-58, 52, 88), objetivo: new THREE.Vector3(10, 6, -10) };
-const VISTA_SOTANOS = { camara: new THREE.Vector3(-62, 26, 52), objetivo: new THREE.Vector3(10, -4, -14) };
+const VISTA_SOTANOS = { camara: new THREE.Vector3(-30, 14, 70), objetivo: new THREE.Vector3(12, -10, -12) };
 
 export class Campus3D {
   constructor(contenedor, { alSeleccionar } = {}) {
@@ -163,13 +164,16 @@ export class Campus3D {
       let grupo;
       if (e.tipo === 'EDIFICIO') grupo = this.#edificio(e, lugaresDe);
       else if (e.tipo === 'ACCESO') grupo = this.#acceso(e);
-      else grupo = this.#plazoleta(e);
+      else if (e.tipo === 'ZONA_VERDE') grupo = this.#sendero(e);
+      else if (e.tipo === 'BICICLETAS') grupo = this.#estacionBici(e);
+      else if (e.tipo === 'PLAZOLETA') grupo = this.#plazoletaMesas(e);
+      else grupo = this.#piso(e);
 
       grupo.position.set(e.x, 0, e.z);
       grupo.traverse(o => { o.userData.id = e.id; });
       this.escena.add(grupo);
 
-      const altura = e.tipo === 'EDIFICIO' ? e.pisos * ALTURA_PISO + 8 : e.tipo === 'ACCESO' ? 8.5 : 2;
+      const altura = { EDIFICIO: e.pisos * ALTURA_PISO + 8, ACCESO: 12, BICICLETAS: 5, PLAZOLETA: 5 }[e.tipo] ?? 2;
       const etiqueta = this.#etiqueta(e.nombre, new THREE.Vector3(0, altura, 0), 'etiqueta-3d', grupo);
 
       const materiales = [];
@@ -179,7 +183,7 @@ export class Campus3D {
       });
       this.bloques.set(e.id, { grupo, etiqueta, datos: e, materiales });
     }
-    this.#sotanos(edificios.filter(e => e.tipo === 'EDIFICIO' && e.sotanos > 0));
+    this.#sotanos(edificios.filter(e => e.tipo === 'EDIFICIO' && e.sotanos > 0), lugares);
   }
 
   /* ---------------------------------------------------------------- Bloques de ladrillo */
@@ -212,7 +216,49 @@ export class Campus3D {
 
     if (conCanchas) this.#canchas(grupo, e, alto + 1.2);
     else this.#equiposTechos(grupo, e, alto + 0.95);
+    if (e.codigo === 'B') this.#entradaBloqueB(grupo, e);
+    if (e.codigo === 'A') this.#logoBloqueA(grupo, e, alto);
     return grupo;
+  }
+
+  /** Entrada del Bloque B sobre el sendero: puertas de vidrio, aviso y rampas con baranda. */
+  #entradaBloqueB(grupo, e) {
+    const x = -e.ancho / 2;
+    const marco = new THREE.MeshStandardMaterial({ color: '#2b2f33', metalness: 0.4 });
+    const vidrio = new THREE.MeshStandardMaterial({ color: '#7fb4c9', transparent: true, opacity: 0.55, metalness: 0.3 });
+    const puerta = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.8, 5), vidrio);
+    puerta.position.set(x - 0.05, 1.4, 0);
+    const voladizo = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.3, 7), new THREE.MeshStandardMaterial({ color: '#e9e6df' }));
+    voladizo.position.set(x - 0.8, 3.2, 0);
+    const aviso = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.8, 2.4), [
+      new THREE.MeshStandardMaterial({ map: texturaTexto('BLOQUE B', '#1f9bb0', '#ffffff', 256, 80) }), marco, marco, marco, marco, marco]);
+    aviso.rotation.y = Math.PI;
+    aviso.position.set(x - 0.12, 3.8, 0);
+    grupo.add(puerta, voladizo, aviso);
+    // Rampas a ambos lados de la puerta y muros bajos
+    const rampaMat = new THREE.MeshStandardMaterial({ color: '#cfcac1', roughness: 1 });
+    const muro = new THREE.MeshStandardMaterial({ color: '#7c7d6b' });
+    for (const lado of [-1, 1]) {
+      const rampa = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.2, 7), rampaMat);
+      rampa.position.set(x - 3, 0.35, lado * 6.2);
+      rampa.rotation.x = lado * 0.07;
+      const pretil = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1, 7.5), muro);
+      pretil.position.set(x - 4.3, 0.5, lado * 6.2);
+      const baranda = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 7.5), marco);
+      baranda.position.set(x - 4.3, 1.2, lado * 6.2);
+      grupo.add(rampa, pretil, baranda);
+    }
+    const plaza = new THREE.Mesh(new THREE.BoxGeometry(4, 0.12, 5), rampaMat);
+    plaza.position.set(x - 2, 0.06, 0);
+    grupo.add(plaza);
+  }
+
+  /** Logo de la universidad en lo alto de la fachada del Bloque A que mira al sendero. */
+  #logoBloqueA(grupo, e, alto) {
+    const logo = new THREE.Mesh(new THREE.PlaneGeometry(9, 2.2),
+      new THREE.MeshStandardMaterial({ map: texturaLogoLinea(), transparent: true }));
+    logo.position.set(-e.ancho / 2 + 7, alto - 1.6, e.profundidad / 2 + 0.06);
+    grupo.add(logo);
   }
 
   #canchas(grupo, e, y) {
@@ -258,97 +304,272 @@ export class Campus3D {
   }
 
   /* ---------------------------------------------------------------- Pabellón de acceso */
+  /*
+   * Como en las fotos: una cubierta inclinada de policarbonato sobre cerchas de acero, que sube
+   * hacia la esquina del aviso de la UCC; debajo, fachadas de vidrio con afiches, un muro de
+   * madera, los locales de Comuna y Bonne Vie, la portería con torniquetes y la terraza.
+   */
   #acceso(e) {
-    const grupo = new THREE.Group();
-    const vidrio = new THREE.MeshStandardMaterial({ color: '#a9c7d8', transparent: true, opacity: 0.45, roughness: 0.1, metalness: 0.3 });
-    const acero = new THREE.MeshStandardMaterial({ color: '#8d969d', metalness: 0.6, roughness: 0.4 });
-    const caja = new THREE.Mesh(new THREE.BoxGeometry(e.ancho, 4.2, e.profundidad), vidrio);
-    caja.position.y = 2.1;
-    grupo.add(caja);
+    const g = new THREE.Group();
+    const W = e.ancho, D = e.profundidad;
+    const acero = new THREE.MeshStandardMaterial({ color: '#9aa3aa', metalness: 0.6, roughness: 0.35 });
+    const vidrio = new THREE.MeshStandardMaterial({ color: '#a9c7d8', transparent: true, opacity: 0.4, roughness: 0.1, metalness: 0.3 });
+    const policarbonato = new THREE.MeshStandardMaterial({ color: '#eef2f4', transparent: true, opacity: 0.55, side: THREE.DoubleSide, roughness: 0.3 });
+    const madera = new THREE.MeshStandardMaterial({ color: '#7a3f26', roughness: 0.7 });
+    const piso = new THREE.MeshStandardMaterial({ color: '#b9b5ae', roughness: 0.9 });
 
-    // Cubierta inclinada (sube hacia el oriente, como en la foto)
+    // Piso interior y plaza de ladrillo en espina de pescado al frente
+    const base = new THREE.Mesh(new THREE.BoxGeometry(W, 0.15, D), piso);
+    base.position.y = 0.075; base.receiveShadow = true;
+    const plaza = new THREE.Mesh(new THREE.BoxGeometry(W + 10, 0.1, 6),
+      new THREE.MeshStandardMaterial({ map: texturaEspina(), roughness: 1 }));
+    plaza.position.set(-2, 0.05, D / 2 + 3); plaza.receiveShadow = true;
+    g.add(base, plaza);
+
+    // Cubierta inclinada: baja en el extremo occidental (5 m), alta en el aviso (10 m)
+    const altura = (x) => 5 + (x + W / 2) / W * 5;
     const forma = new THREE.Shape();
-    forma.moveTo(-e.ancho / 2 - 1, 4.2);
-    forma.lineTo(e.ancho / 2 + 1, 4.2);
-    forma.lineTo(e.ancho / 2 + 1, 7.4);
-    forma.lineTo(-e.ancho / 2 - 1, 4.8);
+    forma.moveTo(-W / 2 - 1.5, altura(-W / 2 - 1.5));
+    forma.lineTo(W / 2 + 0.5, altura(W / 2 + 0.5));
+    forma.lineTo(W / 2 + 0.5, altura(W / 2 + 0.5) - 0.25);
+    forma.lineTo(-W / 2 - 1.5, altura(-W / 2 - 1.5) - 0.25);
     forma.closePath();
-    const cubierta = new THREE.Mesh(new THREE.ExtrudeGeometry(forma, { depth: e.profundidad + 2, bevelEnabled: false }), acero);
-    cubierta.position.z = -(e.profundidad + 2) / 2;
+    const cubierta = new THREE.Mesh(new THREE.ExtrudeGeometry(forma, { depth: D + 3, bevelEnabled: false }), policarbonato);
+    cubierta.position.z = -D / 2 - 1;
     cubierta.castShadow = true;
-    grupo.add(cubierta);
-
-    // Columnas
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const c = new THREE.Mesh(new THREE.BoxGeometry(0.3, 6, 0.3), acero);
-      c.position.set(sx * (e.ancho / 2), 3, sz * (e.profundidad / 2));
-      grupo.add(c);
+    g.add(cubierta);
+    // Cerchas (vigas y diagonales) bajo la cubierta
+    for (let x = -W / 2; x <= W / 2 + 0.01; x += W / 6) {
+      const h = altura(x);
+      const viga = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, D + 3), acero);
+      viga.position.set(x, h - 0.35, 0.5);
+      const columna = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, h, 8), acero);
+      columna.position.set(x, h / 2, D / 2 + 1);
+      g.add(viga, columna);
+      for (let z = -D / 2; z < D / 2 + 1; z += 2.4) {
+        const diag = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 2.8), acero);
+        diag.position.set(x, h - 0.9, z + 1.2);
+        diag.rotation.x = 0.4;
+        g.add(diag);
+      }
     }
-    // Aviso con el logo
-    const aviso = new THREE.Mesh(new THREE.BoxGeometry(5, 3.2, 0.2), [
-      acero, acero, acero, acero,
-      new THREE.MeshStandardMaterial({ map: texturaAviso() }), acero,
-    ]);
-    aviso.position.set(e.ancho / 2 - 4.5, 4.6, e.profundidad / 2 + 1.1);
-    grupo.add(aviso);
-    // Tapete de ladrillo frente al acceso
-    const tapete = new THREE.Mesh(new THREE.BoxGeometry(e.ancho + 6, 0.08, 7), new THREE.MeshStandardMaterial({ color: '#a8604a' }));
-    tapete.position.set(0, 0.05, e.profundidad / 2 + 3.5);
-    tapete.receiveShadow = true;
-    grupo.add(tapete);
-    return grupo;
+    for (let z = -D / 2; z <= D / 2 + 2; z += 2.4) {
+      const correa = new THREE.Mesh(new THREE.BoxGeometry(W + 2, 0.1, 0.1), acero);
+      correa.position.set(-0.5, (altura(-W / 2) + altura(W / 2)) / 2 - 0.3, z);
+      correa.rotation.z = Math.atan2(altura(W / 2) - altura(-W / 2), W);
+      g.add(correa);
+    }
+
+    // Fachada frontal: vidrio con afiches (izquierda), muro de madera inclinado, locales (derecha)
+    const afiches = new THREE.Mesh(new THREE.BoxGeometry(W * 0.42, 3.6, 0.15), [
+      vidrio, vidrio, vidrio, vidrio, new THREE.MeshStandardMaterial({ map: texturaAfiches() }), vidrio]);
+    afiches.position.set(-W / 2 + W * 0.21, 1.8, D / 2);
+    const muroMadera = new THREE.Mesh(new THREE.BoxGeometry(W * 0.16, 4.2, 0.3), madera);
+    muroMadera.position.set(-W / 2 + W * 0.5, 2.1, D / 2 - 1.5);
+    const locales = new THREE.Mesh(new THREE.BoxGeometry(W * 0.4, 3.4, 0.15), [
+      vidrio, vidrio, vidrio, vidrio, new THREE.MeshStandardMaterial({ map: texturaLocales() }), vidrio]);
+    locales.position.set(W / 2 - W * 0.2, 1.7, D / 2 - 0.5);
+    g.add(afiches, muroMadera, locales);
+
+    // Gran aviso blanco de la UCC sobre los locales
+    const aviso = new THREE.Mesh(new THREE.BoxGeometry(8, 5.2, 0.4), [
+      acero, acero, acero, acero, new THREE.MeshStandardMaterial({ map: texturaAviso() }), acero]);
+    aviso.position.set(W / 2 - 5.2, 6.4, D / 2 - 0.2);
+    aviso.castShadow = true;
+    // Panel de oferta académica junto al aviso
+    const cartel = new THREE.Mesh(new THREE.BoxGeometry(3.4, 4.2, 0.15), [
+      acero, acero, acero, acero, new THREE.MeshStandardMaterial({ map: texturaCartelProgramas() }), acero]);
+    cartel.position.set(W / 2 - 11.2, 5.6, D / 2 - 0.4);
+    g.add(aviso, cartel);
+
+    // Portería: mesón de madera clara, torniquetes y sillas azules
+    const meson = new THREE.Mesh(new THREE.BoxGeometry(5, 1.1, 1.4), new THREE.MeshStandardMaterial({ color: '#d8c3a0' }));
+    meson.position.set(-1, 0.7, -0.5);
+    g.add(meson);
+    for (let i = 0; i < 3; i++) {
+      const t = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1, 1.1), acero);
+      t.position.set(-3.5 + i * 1.2, 0.65, 1.8);
+      g.add(t);
+    }
+    const sillas = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 3), new THREE.MeshStandardMaterial({ color: '#2f4fa3' }));
+    sillas.position.set(-W / 2 + 1.2, 0.5, 0);
+    g.add(sillas);
+
+    // Terraza de Bonne Vie con mesas y parasoles
+    for (let i = 0; i < 3; i++) g.add(mesa(W / 2 + 2.2, D / 2 - 2 - i * 3, i === 1));
+    // Rampa de adoquín ecológico al costado
+    const rampa = new THREE.Mesh(new THREE.BoxGeometry(5, 0.12, D + 4),
+      new THREE.MeshStandardMaterial({ map: texturaAdoquinGrama(), roughness: 1 }));
+    rampa.position.set(W / 2 + 2.5, 0.04, -1);
+    rampa.receiveShadow = true;
+    g.add(rampa);
+    return g;
   }
 
-  /* ---------------------------------------------------------------- Plazoleta y sendero */
-  #plazoleta(e) {
-    const grupo = new THREE.Group();
-    const adoquin = new THREE.Mesh(new THREE.BoxGeometry(e.ancho, 0.1, e.profundidad),
-      new THREE.MeshStandardMaterial({ color: '#c8cbc4', roughness: 1 }));
-    adoquin.position.y = 0.05;
-    adoquin.receiveShadow = true;
-    const sendero = new THREE.Mesh(new THREE.BoxGeometry(4, 0.12, e.profundidad),
-      new THREE.MeshStandardMaterial({ color: '#e4e1da', roughness: 1 }));
-    sendero.position.set(e.ancho / 2 - 7, 0.08, 0);
-    const jardin = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.3, e.profundidad - 4),
-      new THREE.MeshStandardMaterial({ color: e.color, roughness: 1 }));
-    jardin.position.set(e.ancho / 2 - 3.6, 0.15, 0);
-    const jardin2 = jardin.clone();
-    jardin2.position.x = -e.ancho / 2 + 3;
-    grupo.add(adoquin, sendero, jardin, jardin2);
-    for (let z = -e.profundidad / 2 + 3; z < e.profundidad / 2 - 2; z += 6) {
-      grupo.add(palma(e.ancho / 2 - 3.6, z));
-      grupo.add(arbusto(-e.ancho / 2 + 3, z + 3));
+  /* ---------------------------------------------------------------- Sendero de los cipreses */
+  #sendero(e) {
+    const g = new THREE.Group();
+    const L = e.profundidad;
+    const tablero = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.14, L),
+      new THREE.MeshStandardMaterial({ map: texturaBaldosaDiagonal(L), roughness: 0.9 }));
+    tablero.position.y = 0.07; tablero.receiveShadow = true;
+    const grama = new THREE.MeshStandardMaterial({ color: '#6fa25a', roughness: 1 });
+    const franjaDer = new THREE.Mesh(new THREE.BoxGeometry(3, 0.25, L - 2), grama);
+    franjaDer.position.set(4.1, 0.12, 0);
+    const franjaIzq = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.25, L - 6), grama);
+    franjaIzq.position.set(-3.7, 0.12, 2);
+    const adoquin = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.1, L),
+      new THREE.MeshStandardMaterial({ map: texturaAdoquinGrama(), roughness: 1 }));
+    adoquin.position.set(-6.1, 0.05, 0);
+    g.add(tablero, franjaDer, franjaIzq, adoquin);
+    // Cipreses a ambos lados
+    for (let z = -L / 2 + 3; z < L / 2 - 1; z += 4.2) {
+      g.add(cipres(3.4, z, 7 + ((z * 7) % 3 + 3) % 3));
+      g.add(cipres(-3.3, z + 2, 6.5 + ((z * 5) % 2 + 2) % 2));
     }
-    return grupo;
+    // Muros de piedra de las jardineras (izquierda) y flores
+    const piedra = new THREE.MeshStandardMaterial({ color: '#6b5a50', roughness: 1, flatShading: true });
+    for (const [z, largo] of [[6, 8], [-4, 6]]) {
+      const muro = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.9, largo), piedra);
+      muro.position.set(-7.6, 0.45, z);
+      g.add(muro);
+    }
+    for (let z = -L / 2 + 2; z < L / 2 - 2; z += 2.5) g.add(flores(5.2, z));
+    // Palmas y yucas junto al Bloque B
+    for (const z of [-10, 2, 12]) g.add(palma(6.4, z));
+    // Postes de luz
+    for (const z of [-12, 0, 12]) g.add(poste(-2.9, z));
+    return g;
+  }
+
+  /* ---------------------------------------------------------------- Estación UrkuBici */
+  #estacionBici(e) {
+    const g = new THREE.Group();
+    const piso = new THREE.Mesh(new THREE.BoxGeometry(e.ancho, 0.1, e.profundidad),
+      new THREE.MeshStandardMaterial({ map: texturaEspina(), roughness: 1 }));
+    piso.position.y = 0.05; piso.receiveShadow = true;
+    g.add(piso);
+    // Cubierta de paneles solares sobre apoyos en V
+    const negro = new THREE.MeshStandardMaterial({ color: '#2c3136', metalness: 0.5 });
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(e.ancho - 2, 0.15, 4.2),
+      new THREE.MeshStandardMaterial({ color: '#1f2e44', metalness: 0.5, roughness: 0.3 }));
+    panel.position.set(0, 3.1, 0); panel.rotation.x = -0.12; panel.castShadow = true;
+    g.add(panel);
+    for (const x of [-e.ancho / 2 + 2, 0, e.ancho / 2 - 2]) for (const s of [-1, 1]) {
+      const pata = new THREE.Mesh(new THREE.BoxGeometry(0.15, 3.3, 0.15), negro);
+      pata.position.set(x + s * 0.7, 1.6, 0.3); pata.rotation.z = s * 0.25;
+      g.add(pata);
+    }
+    // Bicicletas blancas
+    for (let i = 0; i < 10; i++) g.add(bicicleta(-e.ancho / 2 + 1.5 + i * 0.95, 0.4));
+    // Caseta de ladrillo vecina
+    const caseta = new THREE.Mesh(new THREE.BoxGeometry(4, 2.8, 5), new THREE.MeshStandardMaterial({ color: '#b0583f' }));
+    caseta.position.set(-e.ancho / 2 - 3, 1.4, 6); caseta.castShadow = true;
+    g.add(caseta);
+    return g;
+  }
+
+  /* ---------------------------------------------------------------- Plazoleta de mesas */
+  #plazoletaMesas(e) {
+    const g = new THREE.Group();
+    const piso = new THREE.Mesh(new THREE.BoxGeometry(e.ancho, 0.1, e.profundidad),
+      new THREE.MeshStandardMaterial({ map: texturaAdoquinGrama(), roughness: 1 }));
+    piso.position.y = 0.05; piso.receiveShadow = true;
+    g.add(piso);
+    for (const [x, z] of [[-3, 1], [1.5, 3.5], [3.5, -0.5]]) g.add(mesa(x, z, false));
+    // Sala de juegos: pabellón blanco con cubierta clara y ventanas angostas
+    const sala = new THREE.Mesh(new THREE.BoxGeometry(8, 3, 4.5), new THREE.MeshStandardMaterial({ color: '#f3f3f1' }));
+    sala.position.set(-1, 1.5, -e.profundidad / 2 + 2.5); sala.castShadow = true;
+    const techo = new THREE.Mesh(new THREE.BoxGeometry(8.6, 0.25, 5), new THREE.MeshStandardMaterial({ color: '#dfe3e6' }));
+    techo.position.set(-1, 3.1, -e.profundidad / 2 + 2.5);
+    const ladrillo = new THREE.Mesh(new THREE.BoxGeometry(3, 2.6, 4), new THREE.MeshStandardMaterial({ color: '#b0583f' }));
+    ladrillo.position.set(4.5, 1.3, -e.profundidad / 2 + 2.3);
+    g.add(sala, techo, ladrillo);
+    // Graderías de concreto al frente y señal de punto de encuentro
+    const concreto = new THREE.MeshStandardMaterial({ color: '#cfc9bd' });
+    for (let i = 0; i < 3; i++) {
+      const grada = new THREE.Mesh(new THREE.BoxGeometry(e.ancho, 0.3 * (i + 1), 0.8), concreto);
+      grada.position.set(0, 0.15 * (i + 1), e.profundidad / 2 + 0.4 + (2 - i) * 0.8);
+      g.add(grada);
+    }
+    const pe = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.05),
+      new THREE.MeshStandardMaterial({ map: texturaTexto('PE', '#2e9b4f', '#ffffff', 64, 80) }));
+    pe.position.set(e.ancho / 2 - 1, 2, 2);
+    const poste = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2, 6), new THREE.MeshStandardMaterial({ color: '#cccccc' }));
+    poste.position.set(e.ancho / 2 - 1, 1, 2);
+    g.add(pe, poste);
+    return g;
+  }
+
+  /* ---------------------------------------------------------------- Zona genérica */
+  #piso(e) {
+    const g = new THREE.Group();
+    const m = new THREE.Mesh(new THREE.BoxGeometry(e.ancho, 0.1, e.profundidad),
+      new THREE.MeshStandardMaterial({ color: e.color, roughness: 1 }));
+    m.position.y = 0.05; m.receiveShadow = true;
+    g.add(m);
+    return g;
   }
 
   /* ---------------------------------------------------------------- Sótanos conectados */
-  #sotanos(edificios) {
-    const mat = new THREE.MeshStandardMaterial({ color: '#5b84b1', transparent: true, opacity: 0.85 });
-    const losa = new THREE.LineBasicMaterial({ color: '#dfe9f5' });
+  /*
+   * Cada sótano es una losa translúcida; dentro se dibujan como cajas de color los recintos que
+   * la base de datos tiene en ese nivel (piso negativo), repartidos a lo largo del bloque.
+   */
+  #sotanos(edificios, lugares) {
+    const losaMat = new THREE.MeshStandardMaterial({ color: '#5b84b1', transparent: true, opacity: 0.28, depthWrite: false });
+    const piso = new THREE.MeshStandardMaterial({ color: '#dfe5ec' });
+    const borde = new THREE.LineBasicMaterial({ color: '#dfe9f5' });
+    const colores = { CLINICA: '#e2574c', LABORATORIO: '#8e6cc8', OFICINA: '#3d7cc9', SERVICIO: '#2fa37a', SEGURIDAD: '#e0a526' };
     for (const e of edificios) {
       for (let s = 1; s <= e.sotanos; s++) {
-        const nivel = new THREE.Mesh(new THREE.BoxGeometry(e.ancho, ALTURA_SOTANO - 0.3, e.profundidad), mat);
-        nivel.position.set(e.x, -s * ALTURA_SOTANO + ALTURA_SOTANO / 2, e.z);
+        const y0 = -s * SEPARACION_SOTANOS;
+        const nivel = new THREE.Mesh(new THREE.BoxGeometry(e.ancho, ALTURA_SOTANO - 0.3, e.profundidad), losaMat);
+        nivel.position.set(e.x, y0 + ALTURA_SOTANO / 2, e.z);
         nivel.userData.id = e.id;
-        const borde = new THREE.LineSegments(new THREE.EdgesGeometry(nivel.geometry), losa);
-        borde.position.copy(nivel.position);
-        this.grupoSotanos.add(nivel, borde);
-        const lado = e.x < 10 ? -1 : 1;   // etiqueta hacia afuera del campus
-        this.#etiqueta(`${e.nombre} · Sótano ${s}`, new THREE.Vector3(e.x + lado * (e.ancho / 2 + 3), nivel.position.y, e.z), 'etiqueta-mini', this.grupoSotanos);
+        const losa = new THREE.Mesh(new THREE.BoxGeometry(e.ancho, 0.2, e.profundidad), piso);
+        losa.position.set(e.x, y0 + 0.1, e.z);
+        losa.userData.id = e.id;
+        const aristas = new THREE.LineSegments(new THREE.EdgesGeometry(nivel.geometry), borde);
+        aristas.position.copy(nivel.position);
+        this.grupoSotanos.add(nivel, losa, aristas);
+
+        const nombreNivel = e.codigo === 'B' && s === 1 ? 'Piso 0 (sótano 1)' : `Sótano ${s}`;
+        this.#etiqueta(`${e.nombre} · ${nombreNivel}`, new THREE.Vector3(e.x - e.ancho / 2, y0 + 3.2, e.z + e.profundidad / 2), 'etiqueta-nivel', this.grupoSotanos);
+
+        // Recintos de este nivel
+        const aqui = lugares.filter(l => l.edificioId === e.id && l.piso === -s && l.tipo !== 'CIRCULACION');
+        if (!aqui.length) continue;
+        const largo = Math.max(e.ancho, e.profundidad), corto = Math.min(e.ancho, e.profundidad);
+        const aLoLargoDeZ = e.profundidad >= e.ancho;
+        const filas = aqui.length > 2 ? 2 : 1;
+        const porFila = Math.ceil(aqui.length / filas);
+        const celda = (largo - 2) / porFila, ancho = (corto - 2) / filas;
+        aqui.forEach((l, i) => {
+          const f = Math.floor(i / porFila), c = i % porFila;
+          const a = -largo / 2 + 1 + celda * (c + 0.5), b = -corto / 2 + 1 + ancho * (f + 0.5);
+          const recinto = new THREE.Mesh(
+            new THREE.BoxGeometry(aLoLargoDeZ ? ancho - 0.8 : celda - 0.8, 2, aLoLargoDeZ ? celda - 0.8 : ancho - 0.8),
+            new THREE.MeshStandardMaterial({ color: colores[l.tipo] ?? '#7d8b99', transparent: true, opacity: 0.85 }));
+          recinto.position.set(e.x + (aLoLargoDeZ ? b : a), y0 + 1.2, e.z + (aLoLargoDeZ ? a : b));
+          recinto.userData.id = e.id;
+          this.grupoSotanos.add(recinto);
+          this.#etiqueta(l.nombre.replace(' de la Clínica Odontológica', '').replace(' de la clínica', ''), recinto.position.clone().add(new THREE.Vector3(0, 1.3 + (i % 2) * 1.6, 0)), 'etiqueta-sotano', this.grupoSotanos);
+        });
       }
     }
     // Conexión subterránea entre bloques
     if (edificios.length >= 2) {
       const [a, b] = edificios;
-      const inicio = new THREE.Vector3(a.x, -ALTURA_SOTANO / 2, a.z);
-      const fin = new THREE.Vector3(b.x, -ALTURA_SOTANO / 2, b.z);
+      const yT = -SEPARACION_SOTANOS + 1.3;
+      const inicio = new THREE.Vector3(a.x, yT, a.z);
+      const fin = new THREE.Vector3(b.x, yT, b.z);
       const largo = inicio.distanceTo(fin);
-      const tunel = new THREE.Mesh(new THREE.BoxGeometry(4, 2.6, largo), new THREE.MeshStandardMaterial({ color: '#f0b429', transparent: true, opacity: 0.85 }));
+      const tunel = new THREE.Mesh(new THREE.BoxGeometry(3, 2.4, largo), new THREE.MeshStandardMaterial({ color: '#f0b429', transparent: true, opacity: 0.6 }));
       tunel.position.copy(inicio).lerp(fin, 0.5);
       tunel.lookAt(fin);
       this.grupoSotanos.add(tunel);
-      this.#etiqueta('Conexión subterránea A–B', tunel.position.clone().add(new THREE.Vector3(0, -2.2, 0)), 'etiqueta-mini', this.grupoSotanos);
+      this.#etiqueta('Conexión subterránea A–B', tunel.position.clone().add(new THREE.Vector3(0, 2, 0)), 'etiqueta-sotano', this.grupoSotanos);
     }
   }
 
@@ -356,6 +577,9 @@ export class Campus3D {
     this.sotanosVisibles = !this.sotanosVisibles;
     this.grupoSotanos.visible = this.sotanosVisibles;
     this.barrio.visible = !this.sotanosVisibles;
+    this.contenedor.classList.toggle('modo-sotanos', this.sotanosVisibles);
+    for (const b of this.bloques.values())
+      if (b.datos.tipo !== 'EDIFICIO') b.grupo.visible = !this.sotanosVisibles;
     for (const m of this.suelos) {
       m.transparent = this.sotanosVisibles;
       m.opacity = this.sotanosVisibles ? 0.35 : 1;
@@ -521,24 +745,6 @@ function texturaFachada(anchoMetros, pisos, colorLadrillo, conBahias) {
   return tex;
 }
 
-function texturaAviso() {
-  const cv = document.createElement('canvas');
-  cv.width = 256; cv.height = 164;
-  const g = cv.getContext('2d');
-  g.fillStyle = '#f7f9fb'; g.fillRect(0, 0, 256, 164);
-  g.fillStyle = '#1f6fb2'; g.fillRect(98, 18, 22, 50);
-  g.fillStyle = '#5bb36b'; g.fillRect(124, 18, 22, 50);
-  g.fillStyle = '#1d3557';
-  g.font = 'bold 20px sans-serif'; g.textAlign = 'center';
-  g.fillText('UNIVERSIDAD', 128, 98);
-  g.fillText('COOPERATIVA', 128, 122);
-  g.font = 'bold 15px sans-serif';
-  g.fillText('DE COLOMBIA', 128, 144);
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
 const matTronco = new THREE.MeshStandardMaterial({ color: '#8a6a48' });
 const matHoja = new THREE.MeshStandardMaterial({ color: '#4f8f45', side: THREE.DoubleSide });
 const matArbusto = new THREE.MeshStandardMaterial({ color: '#5f9a4f', flatShading: true });
@@ -571,3 +777,216 @@ function arbusto(x, z) {
 
 
 
+
+/* ==================================================================== Texturas del pabellón y exteriores */
+
+function lienzo(w, h) {
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  return [cv, cv.getContext('2d')];
+}
+function aTextura(cv, repetir) {
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  if (repetir) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(...repetir); }
+  return t;
+}
+
+function texturaTexto(texto, fondo, color, w = 256, h = 80) {
+  const [cv, g] = lienzo(w, h);
+  g.fillStyle = fondo; g.fillRect(0, 0, w, h);
+  g.fillStyle = color; g.font = `bold ${Math.round(h * 0.45)}px sans-serif`;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(texto, w / 2, h / 2);
+  return aTextura(cv);
+}
+
+/** Ladrillo en espina de pescado de la plaza de entrada. */
+function texturaEspina() {
+  const [cv, g] = lienzo(128, 128);
+  g.fillStyle = '#b97a5c'; g.fillRect(0, 0, 128, 128);
+  g.strokeStyle = 'rgba(80,40,25,0.35)'; g.lineWidth = 1.5;
+  for (let i = -128; i < 256; i += 16) {
+    for (let j = 0; j < 128; j += 32) {
+      g.strokeRect(i + j / 2, j, 16, 8);
+      g.strokeRect(i + j / 2 + 8, j + 8, 8, 16);
+    }
+  }
+  return aTextura(cv, [6, 2]);
+}
+
+/** Adoquín ecológico (concreto con pasto) de rampas y plazoletas. */
+function texturaAdoquinGrama() {
+  const [cv, g] = lienzo(64, 64);
+  g.fillStyle = '#9c968c'; g.fillRect(0, 0, 64, 64);
+  g.fillStyle = '#6d8f4e';
+  for (let x = 4; x < 64; x += 16) for (let y = 4; y < 64; y += 16) g.fillRect(x, y, 8, 8);
+  return aTextura(cv, [6, 8]);
+}
+
+/** Baldosa gris con juntas en diagonal del sendero. */
+function texturaBaldosaDiagonal(largo) {
+  const [cv, g] = lienzo(128, 128);
+  g.fillStyle = '#c9c5bf'; g.fillRect(0, 0, 128, 128);
+  g.strokeStyle = 'rgba(90,90,90,0.35)'; g.lineWidth = 1.5;
+  for (let i = -128; i < 256; i += 32) {
+    g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 128, 128); g.stroke();
+    g.beginPath(); g.moveTo(i + 128, 0); g.lineTo(i, 128); g.stroke();
+  }
+  return aTextura(cv, [1, Math.round(largo / 5)]);
+}
+
+/** Aviso blanco con el logo y las letras de la universidad. */
+function texturaAviso() {
+  const [cv, g] = lienzo(320, 210);
+  g.fillStyle = '#f7f8f8'; g.fillRect(0, 0, 320, 210);
+  // logotipo: U azul y C verde concéntricas
+  g.lineWidth = 16; g.lineCap = 'butt';
+  g.strokeStyle = '#2f9fd8';
+  g.beginPath(); g.moveTo(128, 20); g.lineTo(128, 78); g.arc(152, 78, 24, Math.PI, 0, true); g.lineTo(176, 40); g.stroke();
+  g.strokeStyle = '#7dbb3f'; g.lineWidth = 12;
+  g.beginPath(); g.arc(186, 54, 18, Math.PI * 0.3, Math.PI * 1.7, false); g.stroke();
+  g.fillStyle = '#4b5258'; g.textAlign = 'center';
+  g.font = '600 20px sans-serif'; g.fillText('U N I V E R S I D A D', 160, 135);
+  g.font = 'bold 34px sans-serif'; g.fillText('COOPERATIVA', 160, 170);
+  g.font = '600 18px sans-serif'; g.fillText('D E   C O L O M B I A', 160, 196);
+  return aTextura(cv);
+}
+
+/** Logo en línea para la fachada del Bloque A. */
+function texturaLogoLinea() {
+  const [cv, g] = lienzo(360, 88);
+  g.clearRect(0, 0, 360, 88);
+  g.lineWidth = 9; g.strokeStyle = '#2f9fd8';
+  g.beginPath(); g.moveTo(14, 12); g.lineTo(14, 48); g.arc(30, 48, 16, Math.PI, 0, true); g.lineTo(46, 22); g.stroke();
+  g.strokeStyle = '#7dbb3f'; g.lineWidth = 7;
+  g.beginPath(); g.arc(54, 34, 12, Math.PI * 0.3, Math.PI * 1.7); g.stroke();
+  g.fillStyle = '#3b4248'; g.font = '600 26px sans-serif';
+  g.fillText('Universidad Cooperativa', 80, 38);
+  g.fillText('de Colombia', 80, 70);
+  return aTextura(cv);
+}
+
+/** Vitrina con afiches institucionales (lado izquierdo de la entrada). */
+function texturaAfiches() {
+  const [cv, g] = lienzo(512, 160);
+  g.fillStyle = '#2d3f4f'; g.fillRect(0, 0, 512, 160);
+  const colores = ['#f4d35e', '#5a8fb8', '#1e88a8', '#e9eef2'];
+  for (let i = 0; i < 4; i++) {
+    g.fillStyle = colores[i]; g.fillRect(12 + i * 125, 10, 112, 140);
+    g.fillStyle = 'rgba(20,40,60,0.75)'; g.fillRect(22 + i * 125, 40, 90, 10); g.fillRect(22 + i * 125, 58, 70, 8);
+  }
+  return aTextura(cv);
+}
+
+/** Locales de la entrada: Comuna (créditos) y Bonne Vie. */
+function texturaLocales() {
+  const [cv, g] = lienzo(512, 160);
+  g.fillStyle = '#e9edef'; g.fillRect(0, 0, 512, 160);
+  g.strokeStyle = '#7d8790'; g.lineWidth = 4;
+  for (let x = 0; x <= 512; x += 64) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 160); g.stroke(); }
+  g.fillStyle = '#2e8b57'; g.font = 'bold 18px sans-serif';
+  ['Crédito', 'Estudiantil', 'Credi', 'Aportes'].forEach((t, i) => g.fillText(t, 14 + (i % 2) * 64, 60 + Math.floor(i / 2) * 50));
+  g.fillStyle = '#3a4046'; g.fillRect(152, 30, 100, 130);
+  g.fillStyle = '#8fd0c3'; g.font = 'bold 20px sans-serif'; g.fillText('comuna', 330, 90);
+  g.fillStyle = '#2b2f33'; g.fillRect(400, 0, 112, 34);
+  g.fillStyle = '#ffffff'; g.font = 'bold 18px serif'; g.fillText('BONNE VIE', 408, 24);
+  return aTextura(cv);
+}
+
+/** Cartel de oferta académica (pregrados y posgrados). */
+function texturaCartelProgramas() {
+  const [cv, g] = lienzo(170, 210);
+  g.fillStyle = '#f2f6f4'; g.fillRect(0, 0, 170, 210);
+  g.fillStyle = '#1e88b8'; g.fillRect(10, 30, 70, 14);
+  g.fillStyle = '#5cb85c'; g.fillRect(92, 30, 70, 14);
+  g.fillStyle = '#ffffff'; g.font = 'bold 9px sans-serif';
+  g.fillText('PREGRADOS', 18, 41); g.fillText('POSGRADOS', 100, 41);
+  g.fillStyle = '#5b6770';
+  for (let i = 0; i < 10; i++) { g.fillRect(12, 56 + i * 13, 50, 3); g.fillRect(94, 56 + i * 13, 54, 3); }
+  g.fillStyle = '#2e8b57'; g.fillRect(0, 194, 170, 16);
+  return aTextura(cv);
+}
+
+/* ==================================================================== Mobiliario y vegetación extra */
+
+const matCipres = new THREE.MeshStandardMaterial({ color: '#2f5b3b', roughness: 1, flatShading: true });
+function cipres(x, z, alto) {
+  const g = new THREE.Group();
+  const copa = new THREE.Mesh(new THREE.ConeGeometry(0.75, alto, 8), matCipres);
+  copa.position.y = alto / 2 + 0.4;
+  copa.castShadow = true;
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.6, 6), matTronco);
+  base.position.y = 0.3;
+  g.add(copa, base);
+  g.position.set(x, 0, z);
+  return g;
+}
+
+const matFlor = [new THREE.MeshStandardMaterial({ color: '#e05c9a' }), new THREE.MeshStandardMaterial({ color: '#f0f0f0' })];
+function flores(x, z) {
+  const g = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const f = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 4), matFlor[i % 2]);
+    f.position.set(x + (i - 1) * 0.5, 0.45, z + (i % 2) * 0.6);
+    g.add(f);
+  }
+  return g;
+}
+
+const matPoste = new THREE.MeshStandardMaterial({ color: '#b8bfc4', metalness: 0.5 });
+function poste(x, z) {
+  const g = new THREE.Group();
+  const p = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 7, 8), matPoste);
+  p.position.y = 3.5;
+  const brazo = new THREE.Mesh(new THREE.BoxGeometry(2, 0.12, 0.25), matPoste);
+  brazo.position.set(0.8, 6.9, 0);
+  g.add(p, brazo);
+  g.position.set(x, 0, z);
+  return g;
+}
+
+const matMesa = new THREE.MeshStandardMaterial({ color: '#4a4f54' });
+const matSilla = new THREE.MeshStandardMaterial({ color: '#eceeee' });
+function mesa(x, z, conParasol) {
+  const g = new THREE.Group();
+  const tablero = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.08, 1.2), conParasol ? matSilla : matMesa);
+  tablero.position.y = 0.75;
+  const pata = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.75, 6), matMesa);
+  pata.position.y = 0.37;
+  g.add(tablero, pata);
+  for (const [dx, dz] of [[0.9, 0], [-0.9, 0], [0, 0.9], [0, -0.9]]) {
+    const silla = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.9, 0.5), conParasol ? matSilla : matMesa);
+    silla.position.set(dx, 0.45, dz);
+    g.add(silla);
+  }
+  if (conParasol) {
+    const asta = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.6, 6), matMesa);
+    asta.position.y = 1.3;
+    const lona = new THREE.Mesh(new THREE.ConeGeometry(1.4, 0.6, 8), new THREE.MeshStandardMaterial({ color: '#8f8a85' }));
+    lona.position.y = 2.6;
+    g.add(asta, lona);
+  }
+  g.position.set(x, 0, z);
+  return g;
+}
+
+const matBici = new THREE.MeshStandardMaterial({ color: '#f4f4f4' });
+const matRueda = new THREE.MeshStandardMaterial({ color: '#222222' });
+function bicicleta(x, z) {
+  const g = new THREE.Group();
+  for (const dz of [-0.55, 0.55]) {
+    const rueda = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.04, 6, 16), matRueda);
+    rueda.rotation.y = Math.PI / 2;
+    rueda.position.set(0, 0.35, dz);
+    g.add(rueda);
+  }
+  const cuadro = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.35, 1.1), matBici);
+  cuadro.position.y = 0.6;
+  const canasta = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.25), matBici);
+  canasta.position.set(0, 0.85, 0.6);
+  g.add(cuadro, canasta);
+  g.position.set(x, 0, z);
+  return g;
+}
