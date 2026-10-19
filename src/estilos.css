@@ -168,6 +168,36 @@ body {
   background: rgba(255,255,255,.7); padding: 6px 10px; border-radius: 8px; z-index: 5;
 }
 
+/* ---------- Recorrido interior ---------- */
+.recorrido { position: fixed; inset: 0; z-index: 15; background: #1d2228; }
+.recorrido[hidden] { display: none; }
+.recorrido-escena { position: absolute; inset: 0; }
+.recorrido-escena canvas { display: block; touch-action: none; cursor: grab; }
+.rec-cabecera { top: 16px; left: 16px; width: 300px; padding: 14px 16px; z-index: 16; }
+.rec-cabecera small { color: var(--texto-2); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.rec-cabecera h2 { margin: 2px 0 10px; font-size: 18px; }
+.rec-niveles { display: flex; gap: 6px; margin-bottom: 10px; }
+.rec-niveles button { flex: 1; padding: 7px 6px; border: 1px solid var(--borde); border-radius: 8px; background: #fff; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--texto); }
+.rec-niveles button.activo { background: var(--azul); border-color: var(--azul); color: #fff; }
+.rec-cabecera select { width: 100%; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--borde); font: inherit; font-size: 13px; background: #fff; }
+.rec-salir { top: 16px; right: 16px; padding: 10px 14px; font: inherit; font-weight: 600; font-size: 13px; cursor: pointer; z-index: 16; color: var(--texto); }
+.rec-plano { top: 64px; right: 16px; width: 200px; height: 250px; padding: 0; cursor: crosshair; z-index: 16; }
+.rec-lugar { left: 16px; top: 236px; width: 300px; padding: 12px 14px; z-index: 16; font-size: 13px; }
+.rec-lugar strong { display: block; font-size: 14px; }
+.rec-lugar span { display: block; color: var(--texto-2); margin-top: 4px; }
+.rec-lugar .aprox { color: #a0611c; }
+.rec-pad { position: fixed; left: 50%; bottom: 46px; transform: translateX(-50%); display: grid; grid-template-columns: repeat(3, 46px); gap: 6px; z-index: 16; }
+.rec-pad button { height: 42px; border-radius: 10px; border: 1px solid var(--borde); background: var(--fondo-tarjeta); font-size: 16px; cursor: pointer; color: var(--texto); box-shadow: var(--sombra); user-select: none; touch-action: none; }
+.rec-pad button:active { background: var(--azul); color: #fff; }
+.rec-ayuda { z-index: 16; left: 50%; transform: translateX(-50%); bottom: 10px; white-space: nowrap; }
+.rec-fundido { position: absolute; inset: 0; background: #11161b; opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 17; }
+.rec-fundido.activo { opacity: 1; }
+.etiqueta-interior { padding: 3px 8px; border-radius: 6px; background: rgba(20,32,48,.8); color: #fff; font-size: 11px; font-weight: 600; white-space: nowrap; pointer-events: none; }
+.recorrido ~ .chat, .chat { z-index: 18; }
+.btn-entrar { display: block; width: 100%; margin-top: 14px; padding: 11px; border: none; border-radius: 10px; background: var(--azul); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+.lugar-ir { float: right; border: none; background: var(--azul-suave); color: var(--azul); border-radius: 6px; padding: 3px 8px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+.piso .contenido .lugar-ir { margin-top: -2px; }
+
 /* ---------- Celular ---------- */
 @media (max-width: 760px) {
   .encabezado { left: 12px; right: 12px; top: 12px; width: auto; padding: 12px; }
@@ -177,6 +207,13 @@ body {
   .mensajes { height: 38vh; }
   .ayuda { display: none; }
   .controles { bottom: auto; top: 142px; left: 12px; }
+  .rec-cabecera { left: 12px; right: 12px; top: 12px; width: auto; padding: 10px 12px; }
+  .rec-cabecera h2 { font-size: 15px; margin-bottom: 6px; }
+  .rec-salir { top: auto; bottom: 150px; right: 12px; }
+  .rec-plano { top: auto; bottom: 200px; right: 12px; width: 120px; height: 150px; }
+  .rec-lugar { top: auto; bottom: 200px; left: 12px; width: 52vw; }
+  .rec-pad { bottom: 74px; left: 50%; }
+  .rec-ayuda { display: none; }
 }
 
 

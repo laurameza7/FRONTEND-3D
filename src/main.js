@@ -1,12 +1,24 @@
 import './estilos.css';
 import { api } from './api.js';
 import { Campus3D } from './campus3d.js';
+import { Recorrido, tieneInterior, destinoDeLugar, destinoEnTexto } from './recorrido.js';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const datos = { edificios: [], lugares: [], programas: [] };
 const campus = new Campus3D($('#escena'), { alSeleccionar: mostrarEdificio });
+const recorrido = new Recorrido({ alSalir: () => campus.pausar(false) });
+window.ucc3d = { campus, recorrido };   // acceso para depurar desde la consola
+
+/** Entra caminando a un bloque (opcionalmente a un piso y lugar concretos). */
+function entrar(codigo, nivel, destino) {
+  campus.pausar(true);
+  $('#chat').classList.add('cerrado');   // el chat queda minimizado para no tapar la vista
+  $('#panel').hidden = true;
+  if (recorrido.abierto) recorrido.irA(nivel, destino);
+  else recorrido.abrir(codigo, nivel, destino);
+}
 
 /* ------------------------------------------------------------------ Estado del backend */
 function estado(tipo, texto) {
@@ -60,7 +72,10 @@ function mostrarEdificio(id) {
       const aqui = lugares.filter(l => l.piso === p || (l.nombre === 'Biblioteca' && p === 3 && l.piso === 2));
       return `<div class="piso ${p < 0 ? 'sotano' : ''}"><b>${etiquetaNivel(p)}</b>
         <div class="contenido ${aqui.length ? '' : 'vacio'}">${aqui.length
-          ? aqui.map(l => `<div><strong>${esc(l.nombre)}</strong>${l.telefono ? `<span>☎ ${esc(l.telefono)}</span>` : ''}</div>`).join('')
+          ? aqui.map(l => {
+              const d = destinoDeLugar(e.codigo, l.nombre);
+              return `<div>${d ? `<button class="lugar-ir" type="button" data-codigo="${e.codigo}" data-nivel="${d.nivel}" data-destino="${d.destino}">🚶 Ir</button>` : ''}<strong>${esc(l.nombre)}</strong>${l.telefono ? `<span>☎ ${esc(l.telefono)}</span>` : ''}</div>`;
+            }).join('')
           : 'Sin información registrada'}</div></div>`;
     }).join('')}</div>`;
   } else if (lugares.length) {
@@ -73,12 +88,19 @@ function mostrarEdificio(id) {
     <div class="chips">${chips}</div>
     <h2>${esc(e.nombre)}</h2>
     <p>${esc(e.descripcion)}</p>
+    ${tieneInterior(e.codigo) ? `<button class="btn-entrar" type="button" data-codigo="${e.codigo}">🚶 Entrar y recorrer el ${esc(e.nombre)} por dentro</button>` : ''}
     ${pisosHtml}
     ${programas.length ? `<h3>Programas con clases aquí</h3>${programas.map(p => `
       <div class="lugar"><strong>${esc(p.nombre)}</strong><span>${esc(p.titulo)}</span></div>`).join('')}` : ''}
   `;
   $('#panel').hidden = false;
 }
+
+$('#panel-contenido').addEventListener('click', (ev) => {
+  const b = ev.target.closest('.btn-entrar, .lugar-ir');
+  if (!b) return;
+  entrar(b.dataset.codigo, b.dataset.nivel ? Number(b.dataset.nivel) : undefined, b.dataset.destino);
+});
 
 $('#cerrar-panel').addEventListener('click', () => {
   $('#panel').hidden = true;
@@ -122,6 +144,8 @@ $('#resultados').addEventListener('click', (ev) => {
 const SUGERENCIAS = ['¿Qué programas hay?', '¿Dónde queda la biblioteca?', '¿Dónde está la clínica odontológica?', '¿Cómo me inscribo?'];
 
 function agregarMensaje(texto, quien, edificioId) {
+  const edificio = datos.edificios.find(x => x.id === edificioId);
+  const dentro = edificio && quien === 'bot' ? destinoEnTexto(edificio.codigo, texto) : null;
   const div = document.createElement('div');
   div.className = 'msg ' + quien;
   div.textContent = texto;
@@ -131,6 +155,13 @@ function agregarMensaje(texto, quien, edificioId) {
     ver.textContent = '📍 Ver en el mapa';
     ver.onclick = () => mostrarEdificio(edificioId);
     div.append(document.createElement('br'), ver);
+  }
+  if (dentro) {
+    const ir = document.createElement('span');
+    ir.className = 'ver';
+    ir.textContent = `  🚶 Llévame a: ${dentro.nombre}`;
+    ir.onclick = () => entrar(edificio.codigo, dentro.nivel, dentro.destino);
+    div.append(ir);
   }
   $('#mensajes').appendChild(div);
   $('#mensajes').scrollTop = $('#mensajes').scrollHeight;
@@ -150,7 +181,7 @@ async function preguntar(texto) {
     const r = await api.preguntar(texto);
     pensando.remove();
     agregarMensaje(r.respuesta, 'bot', r.edificioId);
-    if (r.edificioId) mostrarEdificio(r.edificioId);
+    if (r.edificioId && !recorrido.abierto) mostrarEdificio(r.edificioId);
   } catch {
     pensando.remove();
     agregarMensaje('No pude conectarme con el servidor. Intenta de nuevo en unos segundos.', 'bot');

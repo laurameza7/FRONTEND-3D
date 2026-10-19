@@ -55,6 +55,30 @@
     <button id="btn-sotanos" type="button">Ver sótanos</button>
     <button id="btn-vista" type="button">Vista general</button>
   </div>
+  <!-- Recorrido en primera persona por dentro de los bloques -->
+  <div id="recorrido" class="recorrido" hidden>
+    <div id="recorrido-escena" class="recorrido-escena"></div>
+    <div class="tarjeta rec-cabecera">
+      <small id="rec-edificio">Bloque B</small>
+      <h2 id="rec-nivel">Piso 1</h2>
+      <div id="rec-niveles" class="rec-niveles"></div>
+      <select id="rec-destinos" aria-label="Ir a un lugar"></select>
+    </div>
+    <button id="rec-salir" class="tarjeta rec-salir" type="button">✕ Salir al mapa</button>
+    <canvas id="rec-plano" class="tarjeta rec-plano" width="200" height="250" title="Clic en un punto para ir allí"></canvas>
+    <div id="rec-lugar" class="tarjeta rec-lugar" hidden></div>
+    <div class="rec-pad" aria-label="Controles de movimiento">
+      <button type="button" data-tecla="arrowleft" aria-label="Girar a la izquierda">⟲</button>
+      <button type="button" data-tecla="arrowup" aria-label="Avanzar">▲</button>
+      <button type="button" data-tecla="arrowright" aria-label="Girar a la derecha">⟳</button>
+      <button type="button" data-tecla="a" aria-label="Paso a la izquierda">◀</button>
+      <button type="button" data-tecla="arrowdown" aria-label="Retroceder">▼</button>
+      <button type="button" data-tecla="d" aria-label="Paso a la derecha">▶</button>
+    </div>
+    <p class="ayuda rec-ayuda">Arrastra para mirar · Clic en el piso para caminar · W A S D / flechas · Baja o sube por las escaleras para cambiar de piso</p>
+    <div id="rec-fundido" class="rec-fundido"></div>
+  </div>
+
   <p class="ayuda">Arrastra para girar · Rueda para acercar · Clic en un bloque para ver detalles</p>
 
   <script type="module" src="/src/main.js"></script>

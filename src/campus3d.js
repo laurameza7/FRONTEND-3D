@@ -625,6 +625,11 @@ export class Campus3D {
     this.seleccionado = null;
   }
 
+  /** Detiene el dibujo del mapa mientras se recorre un interior (ahorra batería). */
+  pausar(pausa) {
+    this.renderer.setAnimationLoop(pausa ? null : () => this.#cuadro());
+  }
+
   vistaGeneral() {
     this.#volar(VISTA_GENERAL.objetivo.clone(), VISTA_GENERAL.camara.clone());
   }
