@@ -12,10 +12,74 @@
 <body>
   <div id="escena"></div>
 
+  <!-- Pantalla de carga: avisa mientras el mapa y el servidor están listos -->
+  <div id="carga" class="carga" role="status" aria-live="polite">
+    <img src="/logo-ucc.png" alt="Universidad Cooperativa de Colombia" class="carga-logo" />
+    <h2>Campus Pasto 3D</h2>
+    <div class="carga-barra"><span id="carga-progreso"></span></div>
+    <p id="carga-texto">Cargando el mapa del campus, espere un momento…</p>
+    <small id="carga-aviso" hidden>El servidor se está despertando. La primera vez del día puede tardar hasta un minuto; no cierres la página.</small>
+    <button id="carga-reintentar" type="button" hidden>Reintentar</button>
+  </div>
+
+  <!-- Ingreso, registro o invitado -->
+  <div id="acceso" class="acceso" hidden>
+    <form id="form-acceso" class="acc-tarjeta" autocomplete="on" novalidate>
+      <img src="/logo-ucc.png" alt="Universidad Cooperativa de Colombia" class="acc-logo" />
+      <h2>Bienvenido al Campus Pasto 3D</h2>
+      <p class="acc-sub">Ingresa o crea tu cuenta para recorrer el campus y hablar con Coopi.</p>
+      <div class="acc-pestanas" role="tablist">
+        <button type="button" data-modo="ingresar" class="activo">Ingresar</button>
+        <button type="button" data-modo="registro">Registrarme</button>
+      </div>
+      <label id="acc-campo-nombre" hidden>Nombre completo
+        <input id="acc-nombre" maxlength="80" autocomplete="name" placeholder="Tu nombre" />
+      </label>
+      <label>Correo
+        <input id="acc-correo" type="email" maxlength="120" required autocomplete="email" placeholder="tucorreo@campusucc.edu.co" />
+      </label>
+      <label>Contraseña <span id="acc-contador" class="acc-contador">0/30</span>
+        <input id="acc-clave" type="password" minlength="6" maxlength="30" required autocomplete="current-password" placeholder="Entre 6 y 30 caracteres" />
+      </label>
+      <label id="acc-campo-confirmar" hidden>Confirmar contraseña
+        <input id="acc-confirmar" type="password" maxlength="30" autocomplete="new-password" placeholder="Repite la contraseña" />
+      </label>
+      <p id="acc-error" class="acc-error" role="alert"></p>
+      <button id="acc-enviar" type="submit" class="acc-principal">Ingresar</button>
+      <div class="acc-separador"><span>o</span></div>
+      <button id="acc-invitado" type="button" class="acc-secundario">Entrar como invitado</button>
+      <p class="acc-nota">🔒 Tu contraseña se cifra en tu dispositivo antes de enviarse. Nunca se guarda ni se muestra.</p>
+    </form>
+  </div>
+
+  <!-- Todos los programas -->
+  <div id="programas" class="modal" hidden>
+    <div class="tarjeta modal-tarjeta">
+      <button class="icono" data-cerrar aria-label="Cerrar">✕</button>
+      <h2>🎓 Todos los programas</h2>
+      <p class="modal-sub">Toca un programa y te llevo a él. Coopi te ayudará con lo que necesites.</p>
+      <div class="modal-filtros">
+        <input id="programas-buscar" type="search" placeholder="Buscar programa…" autocomplete="off" />
+        <div id="programas-niveles" class="filtros-nivel"></div>
+      </div>
+      <div id="programas-lista" class="programas-lista"></div>
+    </div>
+  </div>
+
+  <!-- Lugares del campus -->
+  <div id="lugares" class="modal" hidden>
+    <div class="tarjeta modal-tarjeta">
+      <button class="icono" data-cerrar aria-label="Cerrar">✕</button>
+      <h2>📍 Lugares del campus</h2>
+      <p class="modal-sub">Elige a dónde quieres ir.</p>
+      <div id="lugares-lista" class="lugares-lista"></div>
+    </div>
+  </div>
+
   <!-- Encabezado y buscador -->
   <header class="tarjeta encabezado">
     <div class="marca">
-      <span class="logo">UCC</span>
+      <img class="logo" src="/logo-ucc.png" alt="UCC" />
       <div>
         <h1>Campus Pasto 3D</h1>
         <p>Universidad Cooperativa de Colombia</p>
@@ -25,7 +89,17 @@
       <input id="buscar" type="search" placeholder="Buscar bloque, oficina o programa…" autocomplete="off" />
       <ul id="resultados" class="resultados" hidden></ul>
     </div>
-    <div id="estado" class="estado"><span class="punto"></span><span class="texto">Conectando…</span></div>
+    <nav class="menu-principal">
+      <button id="btn-programas" type="button">🎓 Todos los programas</button>
+      <button id="btn-lugares" type="button">📍 Lugares</button>
+    </nav>
+    <div class="pie-encabezado">
+      <div id="estado" class="estado"><span class="punto"></span><span class="texto">Conectando…</span></div>
+      <div id="usuario" class="usuario" hidden>
+        <span id="usuario-nombre"></span>
+        <button id="btn-salir" type="button">Salir</button>
+      </div>
+    </div>
   </header>
 
   <!-- Panel de información del bloque seleccionado -->
@@ -37,15 +111,24 @@
   <!-- Asistente con IA -->
   <section id="chat" class="tarjeta chat">
     <button id="chat-cabecera" class="chat-cabecera">
-      <span class="avatar">C</span>
+      <span class="avatar"><img src="/logo-ucc.png" alt="" /></span>
       <span class="titulo-chat"><strong>Coopi</strong><small>Asistente con IA del campus</small></span>
       <span class="flecha">▾</span>
     </button>
     <div class="chat-cuerpo">
-      <div id="mensajes" class="mensajes"></div>
+      <div class="chat-herramientas">
+        <button id="btn-clave" type="button" title="Escuchar siempre: di «Ey Coopi» y tu pregunta">🎙️ «Ey Coopi»: <b>apagado</b></button>
+        <button id="btn-hablar" type="button" title="Coopi responde en voz alta">🔊 Voz</button>
+      </div>
+      <div id="programa-activo" class="programa-activo" hidden>
+        <span>Hablando de: <b id="programa-activo-nombre"></b></span>
+        <button id="programa-activo-quitar" type="button" aria-label="Dejar de hablar de este programa">✕</button>
+      </div>
+      <div id="mensajes" class="mensajes" aria-live="polite"></div>
       <div id="sugerencias" class="sugerencias"></div>
       <form id="form-chat" class="form-chat">
-        <input id="pregunta" maxlength="500" placeholder="Escribe tu pregunta…" autocomplete="off" />
+        <button id="btn-mic" type="button" class="mic" aria-label="Hablarle a Coopi" title="Habla con Coopi">🎤</button>
+        <input id="pregunta" maxlength="500" placeholder="Escribe o habla con Coopi…" autocomplete="off" />
         <button type="submit" aria-label="Enviar">➤</button>
       </form>
     </div>
