@@ -279,8 +279,83 @@ function sotano2(k) {
   k.zona('pregrado', -12, -16, 12, -3);
 }
 
+/* ======================================================================== Bloque A · Piso 1 (Cafetería) */
+/*
+ * Cafetería / restaurante del campus. Distribución aproximada: se ajustará con los videos.
+ * Entrada de vidrio hacia el sendero, barra de atención con vitrinas, caja, menú del día,
+ * zona de microondas, mesas para 4 y barra alta junto a los ventanales.
+ */
+function cafeteria(k) {
+  k.limitar(-14, -10, 14, 10);
+  k.piso(-14, -10, 14, 10, 'beige');
+  k.vidriera(-14, 10, 14, 10, { huecos: [[12.4, 15.6]] });
+  k.puerta(-0.8, 10, 0, { vidrio: true, ancho: 1.5 });
+  k.puerta(0.8, 10, PI, { vidrio: true, ancho: 1.5 });
+  k.muro(-14, 10, -14, -10, { mat: 'ladrillo', ventanas: [[2, 6], [8, 12], [14, 18]] });
+  k.muro(14, 10, 14, -10, { mat: 'ladrillo' });
+  k.muro(-14, -10, 14, -10, { mat: 'crema' });
+  k.letrero(['CAFETERÍA', 'restaurante · bloque A'], 0, 2.65, 9.85, PI, 'ucc');
+  k.letrero('SALIDA', 3.2, 2.7, 9.85, PI, 'salida');
+
+  // Barra de atención al fondo con vitrinas refrigeradas, caja y menú
+  k.colocar(barraCafeteria(10), -2, -8.6, 0);
+  k.imagen(texturaMenu(), 4.2, 1.6, -2, 2.05, -9.9, 0);
+  k.letrero('CAJA', 4.3, 2.35, -7.4, 0, 'aviso-azul');
+  k.colocar(caja1(), 4.3, -7.6, 0);
+  k.colocar(nevera('#c62828'), 9.2, -9.4, 0);
+  k.colocar(nevera('#1565c0'), 10.4, -9.4, 0);
+  k.colocar(estanteria(2.4, 2.1, 'productos'), 12.6, -9.5, 0);
+  // Cocina detrás de la barra (sin acceso)
+  k.obstaculo(-8, -10, 4, -9.2);
+
+  // Zona de microondas
+  k.colocar(mesaMadera(2.6, 0.6, '#dcdcdc'), -11.6, -9.4, 0);
+  for (const x of [-12.5, -11.6, -10.7]) k.colocar(microondas(), x, -9.4, 0, false, 0.78);
+  k.letrero('MICROONDAS', -11.6, 2.3, -9.9, 0, 'aviso-oscuro');
+  k.colocar(canecas(['#2e7d32', '#212121', '#e8e8e8']), -13.4, -6.2, IZQ);
+
+  // Mesas para 4 personas
+  for (const x of [-10, -5.5, -1, 3.5, 8])
+    for (const z of [-3.6, 0.4, 4.4]) {
+      if (x === -1 && z === 4.4) continue;   // paso libre desde la entrada
+      k.colocar(mesaMadera(1.2, 0.8, '#c9a26b'), x, z, 0);
+      k.colocar(silla('#e65100', 'plastica'), x - 0.35, z + 0.65, PI, false);
+      k.colocar(silla('#e65100', 'plastica'), x + 0.35, z + 0.65, PI, false);
+      k.colocar(silla('#e65100', 'plastica'), x - 0.35, z - 0.65, 0, false);
+      k.colocar(silla('#e65100', 'plastica'), x + 0.35, z - 0.65, 0, false);
+    }
+  // Barra alta con taburetes junto a la ventana
+  k.colocar(mesaMadera(0.5, 10, '#8d6e63'), -13.5, 1, 0, true, 0.3);
+  for (let z = -3.4; z <= 5.4; z += 1.1) k.colocar(taburete(), -12.9, z, 0, false);
+  k.colocar(planta(), 13.2, 9.2, 0);
+  k.colocar(planta(), -13.2, 9.2, 0);
+  k.imagen(texturaLogoUcc(), 1.4, 1.4, 13.9, 1.7, 2, IZQ);
+  k.etiqueta('Biblioteca (pisos 2 y 3) · próximamente', 12, 2.5, 6);
+  k.lamparas(-10, -6, 10, 6, { eje: 'x', paso: 4, tipo: 'panel' });
+
+  k.zona('entrada', -4, 6, 4, 10);
+  k.zona('barra', -8, -10, 6, -6);
+  k.zona('mesas', -14, -6, 14, 6);
+}
+
 /* ======================================================================== Catálogo de interiores */
 export const INTERIORES = {
+  A: {
+    nombre: 'Bloque A',
+    niveles: [
+      {
+        id: 1, nombre: 'Piso 1 · Cafetería', corto: 'Piso 1', construir: cafeteria,
+        destinos: [
+          { id: 'entrada', nombre: 'Entrada de la cafetería', x: 0, z: 8.6, yaw: 0,
+            lugares: ['Cafetería'], claves: ['Cafetería', 'restaurante'] },
+          { id: 'barra', nombre: 'Barra de atención y caja', x: 0, z: -5.4, yaw: 0, aproximado: true,
+            nota: 'Distribución aproximada: se ajustará con los videos del campus.' },
+          { id: 'mesas', nombre: 'Zona de mesas', x: -1, z: 2.4, yaw: IZQ },
+          { id: 'microondas', nombre: 'Microondas', x: -11.6, z: -7.6, yaw: 0 },
+        ],
+      },
+    ],
+  },
   B: {
     nombre: 'Bloque B',
     niveles: [
@@ -331,6 +406,54 @@ export const INTERIORES = {
 };
 
 /* ======================================================================== Muebles */
+/* ---------- Cafetería */
+function barraCafeteria(w) {
+  const g = new THREE.Group();
+  caja(g, w, 1.0, 0.8, '#6d4c41', 0, 0.5, 0);
+  caja(g, w + 0.1, 0.05, 0.9, '#eceff1', 0, 1.02, 0);
+  // vitrinas de vidrio sobre la barra
+  for (let i = 0; i < 3; i++) {
+    const x = -w / 2 + 1.4 + i * 1.9;
+    caja(g, 1.6, 0.5, 0.6, 'vidrio', x, 1.3, 0.05);
+    caja(g, 1.5, 0.04, 0.55, 'acero', x, 1.25, 0.05);
+    for (let j = 0; j < 4; j++) cilindro(g, 0.07, 0.06, j % 2 ? '#d7a35b' : '#f0d9a8', x - 0.55 + j * 0.36, 1.1, 0.05, 10);
+  }
+  // bandejas
+  caja(g, w - 6.5, 0.04, 0.4, 'acero', w / 2 - 1.8, 1.06, 0.3);
+  return g;
+}
+function caja1() {
+  const g = new THREE.Group();
+  caja(g, 1.4, 1.05, 0.7, '#37474f', 0, 0.52, 0);
+  caja(g, 0.35, 0.25, 0.05, 'negro', 0, 1.25, 0.1);
+  caja(g, 0.4, 0.12, 0.35, '#263238', 0, 1.11, 0.12);
+  return g;
+}
+function nevera(color) {
+  const g = new THREE.Group();
+  caja(g, 1.0, 2.0, 0.7, color, 0, 1.0, 0);
+  caja(g, 0.85, 1.6, 0.02, 'vidrio', 0, 1.05, 0.36);
+  for (let y = 0.45; y < 1.8; y += 0.42) caja(g, 0.8, 0.02, 0.6, 'acero', 0, y, 0);
+  return g;
+}
+function microondas() {
+  const g = new THREE.Group();
+  caja(g, 0.5, 0.3, 0.38, '#eceff1', 0, 0.15, 0);
+  caja(g, 0.32, 0.22, 0.02, 'negro', -0.06, 0.15, 0.19);
+  return g;
+}
+function texturaMenu() {
+  return memo('menu', () => {
+    const [cv, g] = lienzo(512, 196);
+    g.fillStyle = '#1f2a22'; g.fillRect(0, 0, 512, 196);
+    g.fillStyle = '#f9c74f'; g.font = 'bold 30px sans-serif'; g.fillText('MENÚ DEL DÍA', 24, 42);
+    g.fillStyle = '#ffffff'; g.font = '20px sans-serif';
+    ['Almuerzo ejecutivo', 'Sopa del día', 'Empanadas y pasteles', 'Jugos naturales', 'Café · tinto · aromática']
+      .forEach((t, i) => g.fillText('• ' + t, 24 + (i > 2 ? 250 : 0), 84 + (i % 3) * 34));
+    return textura(cv, false);
+  });
+}
+
 function caja(g, w, h, d, m, x, y, z) {
   const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), typeof m === 'string' ? mat(m) : m);
   b.position.set(x, y, z);
