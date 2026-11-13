@@ -255,8 +255,8 @@ export class Campus3D {
 
   /** Logo de la universidad en lo alto de la fachada del Bloque A que mira al sendero. */
   #logoBloqueA(grupo, e, alto) {
-    const logo = new THREE.Mesh(new THREE.PlaneGeometry(9, 2.2),
-      new THREE.MeshStandardMaterial({ map: texturaLogoLinea(), transparent: true }));
+    const logo = new THREE.Mesh(new THREE.PlaneGeometry(9, 3.1),
+      new THREE.MeshStandardMaterial({ map: texturaLogoOficial(900, 310, null, 1), transparent: true }));
     logo.position.set(-e.ancho / 2 + 7, alto - 1.6, e.profundidad / 2 + 0.06);
     grupo.add(logo);
   }
@@ -373,7 +373,7 @@ export class Campus3D {
 
     // Gran aviso blanco de la UCC sobre los locales
     const aviso = new THREE.Mesh(new THREE.BoxGeometry(8, 5.2, 0.4), [
-      acero, acero, acero, acero, new THREE.MeshStandardMaterial({ map: texturaAviso() }), acero]);
+      acero, acero, acero, acero, new THREE.MeshStandardMaterial({ map: texturaLogoOficial(640, 416, '#f7f8f8', 0.86) }), acero]);
     aviso.position.set(W / 2 - 5.2, 6.4, D / 2 - 0.2);
     aviso.castShadow = true;
     // Panel de oferta académica junto al aviso
@@ -381,6 +381,22 @@ export class Campus3D {
       acero, acero, acero, acero, new THREE.MeshStandardMaterial({ map: texturaCartelProgramas() }), acero]);
     cartel.position.set(W / 2 - 11.2, 5.6, D / 2 - 0.4);
     g.add(aviso, cartel);
+
+    // Tótem con el escudo de la universidad en la plaza, mirando a la Calle 18
+    const totem = new THREE.Group();
+    const piedra = new THREE.MeshStandardMaterial({ color: '#5d6166', roughness: 0.85 });
+    const pedestal = new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.6, 1.6), piedra);
+    pedestal.position.y = 0.3;
+    const placa = new THREE.Mesh(new THREE.BoxGeometry(7, 2.6, 0.35), [
+      piedra, piedra, piedra, piedra, new THREE.MeshStandardMaterial({ map: texturaLogoOficial(1024, 380, '#ffffff', 0.92), roughness: 0.4 }), piedra]);
+    placa.position.y = 1.95;
+    pedestal.castShadow = placa.castShadow = true;
+    const jardinera = new THREE.Mesh(new THREE.BoxGeometry(8.4, 0.35, 2.4), new THREE.MeshStandardMaterial({ color: '#5f8f4a', roughness: 1 }));
+    jardinera.position.set(0, 0.18, 0.3);
+    totem.add(jardinera, pedestal, placa);
+    totem.position.set(-W / 2 + 4.5, 0, D / 2 + 4.6);
+    g.add(totem);
+    this.#etiqueta('Escudo UCC · Entrada principal', new THREE.Vector3(-W / 2 + 4.5, 4, D / 2 + 4.6), 'etiqueta-mini', g);
 
     // Portería: mesón de madera clara, torniquetes y sillas azules
     const meson = new THREE.Mesh(new THREE.BoxGeometry(5, 1.1, 1.4), new THREE.MeshStandardMaterial({ color: '#d8c3a0' }));
@@ -842,35 +858,27 @@ function texturaBaldosaDiagonal(largo) {
   return aTextura(cv, [1, Math.round(largo / 5)]);
 }
 
-/** Aviso blanco con el logo y las letras de la universidad. */
-function texturaAviso() {
-  const [cv, g] = lienzo(320, 210);
-  g.fillStyle = '#f7f8f8'; g.fillRect(0, 0, 320, 210);
-  // logotipo: U azul y C verde concéntricas
-  g.lineWidth = 16; g.lineCap = 'butt';
-  g.strokeStyle = '#2f9fd8';
-  g.beginPath(); g.moveTo(128, 20); g.lineTo(128, 78); g.arc(152, 78, 24, Math.PI, 0, true); g.lineTo(176, 40); g.stroke();
-  g.strokeStyle = '#7dbb3f'; g.lineWidth = 12;
-  g.beginPath(); g.arc(186, 54, 18, Math.PI * 0.3, Math.PI * 1.7, false); g.stroke();
-  g.fillStyle = '#4b5258'; g.textAlign = 'center';
-  g.font = '600 20px sans-serif'; g.fillText('U N I V E R S I D A D', 160, 135);
-  g.font = 'bold 34px sans-serif'; g.fillText('COOPERATIVA', 160, 170);
-  g.font = '600 18px sans-serif'; g.fillText('D E   C O L O M B I A', 160, 196);
-  return aTextura(cv);
-}
-
-/** Logo en línea para la fachada del Bloque A. */
-function texturaLogoLinea() {
-  const [cv, g] = lienzo(360, 88);
-  g.clearRect(0, 0, 360, 88);
-  g.lineWidth = 9; g.strokeStyle = '#2f9fd8';
-  g.beginPath(); g.moveTo(14, 12); g.lineTo(14, 48); g.arc(30, 48, 16, Math.PI, 0, true); g.lineTo(46, 22); g.stroke();
-  g.strokeStyle = '#7dbb3f'; g.lineWidth = 7;
-  g.beginPath(); g.arc(54, 34, 12, Math.PI * 0.3, Math.PI * 1.7); g.stroke();
-  g.fillStyle = '#3b4248'; g.font = '600 26px sans-serif';
-  g.fillText('Universidad Cooperativa', 80, 38);
-  g.fillText('de Colombia', 80, 70);
-  return aTextura(cv);
+/**
+ * Logo oficial de la Universidad Cooperativa de Colombia (public/logo-ucc.png) sobre un
+ * fondo opcional. Mientras carga la imagen se ve el fondo; después se actualiza la textura.
+ */
+function texturaLogoOficial(w, h, fondo, escala = 0.9) {
+  const [cv, g] = lienzo(w, h);
+  const tex = aTextura(cv);
+  const pintar = (img) => {
+    g.clearRect(0, 0, w, h);
+    if (fondo) { g.fillStyle = fondo; g.fillRect(0, 0, w, h); }
+    if (!img) return;
+    const k = Math.min(w * escala / img.width, h * escala / img.height);
+    const iw = img.width * k, ih = img.height * k;
+    g.drawImage(img, (w - iw) / 2, (h - ih) / 2, iw, ih);
+    tex.needsUpdate = true;
+  };
+  pintar(null);
+  const img = new Image();
+  img.onload = () => pintar(img);
+  img.src = '/logo-ucc.png';
+  return tex;
 }
 
 /** Vitrina con afiches institucionales (lado izquierdo de la entrada). */
