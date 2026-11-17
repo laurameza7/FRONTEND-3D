@@ -140,9 +140,10 @@ async function verHistorial() {
 
 /* ================================================================== Navegación */
 /** Entra caminando a un bloque (opcionalmente a un piso y lugar concretos). */
-function entrar(codigo, nivel, destino) {
+function entrar(codigo, nivel, destino, { conChat = false } = {}) {
   campus.pausar(true);
-  $('#chat').classList.add('cerrado');   // el chat queda minimizado para no tapar la vista
+  if (conChat) abrirChat();
+  else $('#chat').classList.add('cerrado');   // el chat queda minimizado para no tapar la vista
   $('#panel').hidden = true;
   if (recorrido.abierto && recorrido.codigo === codigo) recorrido.irA(nivel, destino);
   else {
@@ -157,12 +158,13 @@ function salirDelRecorrido() {
 }
 
 /** Lleva a un lugar: si tiene interior entra caminando; si no, lo muestra en el mapa. */
-function irALugar(lugar) {
-  if (!lugar) return;
+function irALugar(lugar, opciones) {
+  if (!lugar) return false;
   const e = datos.edificios.find(x => x.id === lugar.edificioId);
   const d = e && destinoDeLugar(e.codigo, lugar.nombre);
-  if (d) entrar(e.codigo, d.nivel, d.destino);
-  else if (e) { salirDelRecorrido(); mostrarEdificio(e.id); }
+  if (d) { entrar(e.codigo, d.nivel, d.destino, opciones); return true; }
+  if (e) { salirDelRecorrido(); mostrarEdificio(e.id); }
+  return false;
 }
 
 /* ================================================================== Panel del bloque */
@@ -277,22 +279,13 @@ const accionesPrograma = {
   inscribirme: () => preguntar(`¿Cómo me inscribo a ${programaActual.nombre}?`),
   admisiones: () => irALugar(datos.lugares.find(l => normalizar(l.nombre).startsWith('admisiones'))),
   bloque: () => mostrarEdificio(programaActual.edificioId),
+  facultad: () => irALugar(datos.lugares.find(l => l.id === programaActual.lugarId), { conChat: true }),
 };
 
-/**
- * Muestra un programa: ficha en el panel, el mapa se ubica y Coopi
- * pregunta en qué puede ayudar (las siguientes preguntas son sobre ese programa).
- */
-function mostrarPrograma(p, { desdeCoopi = false } = {}) {
-  if (!p) return;
+/** Ficha del programa en el panel lateral (sobre el mapa). */
+function fichaPrograma(p) {
   salirDelRecorrido();
-  programaActual = p;
-  $('#programa-activo-nombre').textContent = p.nombre;
-  $('#programa-activo').hidden = false;
-
   if (p.edificioId) campus.seleccionar(p.edificioId);
-  else { campus.deseleccionar(); campus.vistaGeneral(); }
-
   $('#panel-contenido').innerHTML = `
     <div class="programa-detalle">
       <div class="chips"><span class="etiqueta" style="background:#2e7d32">${esc(NIVELES[p.nivel] ?? p.nivel)}</span>
@@ -305,22 +298,44 @@ function mostrarPrograma(p, { desdeCoopi = false } = {}) {
       </div>
       <p>${esc(p.descripcion)}</p>
       <h3>¿Dónde?</h3>
-      <div class="lugar"><strong>${p.edificio ? esc(p.edificio) : 'Campus Pasto (Torobajo)'}</strong>
-        <span>Inscripciones y matrícula: Admisiones, Registro y Control Académico (DARC), Bloque B · piso 1.</span></div>
+      ${p.lugar ? `<div class="lugar"><strong>${esc(p.lugar)}</strong><span>${esc(p.ubicacion ?? '')}</span></div>` : ''}
+      <div class="lugar"><strong>Inscripciones y matrícula</strong>
+        <span>Admisiones, Registro y Control Académico (DARC), Bloque B · piso 1.</span></div>
       <div class="acciones-programa">
-        <button type="button" class="principal" data-accion="preguntar">💬 Preguntarle a Coopi sobre este programa</button>
+        ${p.lugarId ? `<button type="button" class="principal" data-accion="facultad">🚶 Ir a la ${esc(p.lugar)}</button>` : ''}
+        <button type="button" ${p.lugarId ? '' : 'class="principal"'} data-accion="preguntar">💬 Preguntarle a Coopi sobre este programa</button>
         <button type="button" data-accion="inscribirme">📝 ¿Cómo me inscribo?</button>
         <button type="button" data-accion="admisiones">🚶 Ir a Admisiones (Bloque B)</button>
         ${p.edificioId ? `<button type="button" data-accion="bloque">🏢 Ver su bloque en el mapa</button>` : ''}
       </div>
     </div>`;
   $('#panel').hidden = false;
+}
+
+/**
+ * Muestra un programa: ficha en el panel, el mapa se ubica y Coopi
+ * pregunta en qué puede ayudar (las siguientes preguntas son sobre ese programa).
+ */
+function mostrarPrograma(p, { desdeCoopi = false } = {}) {
+  if (!p) return;
+  programaActual = p;
+  $('#programa-activo-nombre').textContent = p.nombre;
+  $('#programa-activo').hidden = false;
+
+  // Si se conoce su facultad, se entra caminando hasta allá; si no, se muestra su ficha en el mapa
+  const facultad = p.lugarId && datos.lugares.find(l => l.id === p.lugarId);
+  const adentro = facultad && irALugar(facultad, { conChat: true });
+  if (!adentro) {
+    if (!p.edificioId) { campus.deseleccionar(); campus.vistaGeneral(); }
+    fichaPrograma(p);
+  }
 
   abrirChat();
   if (!desdeCoopi) {
+    const donde = adentro ? ` Estás en la ${p.lugar} (${p.ubicacion}).` : '';
     const texto = `¡Bienvenido al programa de ${p.nombre}! 🎓 Es de la ${p.facultad}`
-      + (p.duracionSemestres ? ` y dura ${p.duracionSemestres} semestres` : '') + `. ¿En qué te puedo ayudar con ${p.nombre}?`;
-    agregarMensaje(texto, 'bot');
+      + (p.duracionSemestres ? ` y dura ${p.duracionSemestres} semestres` : '') + `.${donde} ¿En qué te puedo ayudar con ${p.nombre}?`;
+    agregarMensaje(texto, 'bot', { acciones: adentro ? [{ texto: '📋 Ver la ficha del programa', fn: () => fichaPrograma(p) }] : [] });
     voz.hablar(texto);
   }
   ponerSugerencias([`¿Qué se estudia en ${p.nombre}?`, '¿Cuánto dura?', '¿Qué título otorga?', '¿Cómo me inscribo?']);
