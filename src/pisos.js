@@ -105,8 +105,17 @@ function construir(k, d) {
   };
   extremo(-L / 2, d.extremos.norte ?? 'ventana', 0);
   extremo(L / 2, d.extremos.sur ?? 'ventana', PI);
-  k.muro(-W / 2, -L / 2, -W / 2, L / 2, { mat: 'blanco' });
-  k.muro(W / 2, -L / 2, W / 2, L / 2, { mat: 'blanco' });
+  // Fachadas laterales: cada sala pone su tramo (con ventanas); aquí solo los tramos libres
+  for (const lado of ['izq', 'der']) {
+    const sg = signo(lado);
+    const ocupados = d.salas.filter(s => s.lado === lado && Math.abs(geo(d, s).xe) >= W / 2 - 0.01)
+      .map(s => [s.z0, s.z1]).sort((a, b) => a[0] - b[0]);
+    let z = -L / 2;
+    for (const [a, b] of [...ocupados, [L / 2, L / 2]]) {
+      if (a - z > 0.05) k.muro(sg * W / 2, z, sg * W / 2, a, { mat: 'blanco', ventanas: a - z > 2 ? [[0.6, a - z - 0.6]] : [] });
+      z = Math.max(z, b);
+    }
+  }
 
   // Tramos del borde del pasillo sin sala → muro con ladrillo/franja
   for (const lado of ['izq', 'der']) {
@@ -179,10 +188,11 @@ function sala(k, d, s) {
     k.muro(xi, s.z1, xe, s.z1, { mat: s.tipo === 'escaleras' ? est.pasillo : est.muro });
   }
   // Ventanas al exterior
-  if (Math.abs(xe) >= d.W / 2 - 0.01 && s.tipo !== 'escaleras' && s.tipo !== 'banos' && s.largo > 2) {
-    const v = s.ventanas ?? 'ventana';
+  if (Math.abs(xe) >= d.W / 2 - 0.01) {
+    const v = s.ventanas ?? (s.tipo === 'escaleras' || s.tipo === 'banos' ? 'muro' : 'ventana');
     if (v === 'ventanal') k.vidriera(xe, s.z0, xe, s.z1, {});
-    else k.muro(xe, s.z0, xe, s.z1, { mat: 'blanco', ventanas: [[0.5, s.largo - 0.5]] });
+    else if (v === 'muro' || g.largo <= 2) k.muro(xe, s.z0, xe, s.z1, { mat: s.tipo === 'escaleras' ? est.pasillo : 'blanco' });
+    else k.muro(xe, s.z0, xe, s.z1, { mat: 'blanco', ventanas: [[0.5, g.largo - 0.5]] });
   }
   // Letrero turquesa junto a la puerta (como los del campus)
   if (s.letrero !== false && s.tipo !== 'abierto' && s.tipo !== 'escaleras') {
