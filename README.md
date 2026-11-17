@@ -30,6 +30,16 @@ y el asistente con IA **Coopi**. Construido con **Vite + Three.js** y desplegado
 - **Voz** (`src/voz.js`): micrófono, modo «Ey Coopi» que escucha de fondo y respuestas habladas
   (Chrome o Edge).
 
+- **Interiores completos según los videos del campus** (`src/pisos.js` genera cada piso y `src/bloques.js` lo describe):
+  - Bloque B: pisos 1 a 7 y sótanos — Facultades de Medicina, Ingeniería, Enfermería y Derecho, salones,
+    laboratorios de Ingeniería Industrial, Laboratorio de Innovación (605), Laboratorio de Operaciones,
+    salas de audiencia y el Auditorio Urcunina.
+  - Bloque A: sótano (auditorio y simulación clínica), cafetería y Facultad de Odontología, biblioteca de
+    dos niveles, salas de informática, programa de Derecho, Open Language Center y las canchas de la azotea.
+  - Se sube y baja caminando por las escaleras y se cruza de un bloque al otro por los pasos de cada piso.
+  - Materiales como los reales: ladrillo a la vista con relieve, pisos pulidos que reflejan, puertas de madera,
+    techo reticular del Bloque A con tubería amarilla, franja de madera en los muros y sombras de contacto.
+
 Todos los datos vienen del backend en Java (`ucc-pasto3d-backend`), que a su vez los lee de la
 base de datos (`ucc-pasto3d-database`).
 
