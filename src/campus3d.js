@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
@@ -47,6 +48,13 @@ export class Campus3D {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.1;
+    // Reflejos suaves del cielo en vidrios y metales
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.escena.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.escena.environmentIntensity = 0.35;
+    pmrem.dispose();
     this.contenedor.appendChild(this.renderer.domElement);
 
     this.etiquetas = new CSS2DRenderer();
