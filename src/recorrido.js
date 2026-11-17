@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { INTERIORES } from './planos.js';
 
 /*
@@ -74,16 +76,22 @@ export class Recorrido {
     const edificio = INTERIORES[codigo];
     if (!edificio) return;
     if (!this.iniciado) this.#iniciar();
-    this.edificio = edificio;
-    this.codigo = codigo;
     this.dom.raiz.hidden = false;
-    this.dom.edificio.textContent = edificio.nombre;
-    this.dom.niveles.innerHTML = edificio.niveles
-      .map(n => `<button type="button" data-nivel="${n.id}">${n.corto}</button>`).join('');
     this.#redimensionar();
-    this.#cargarNivel(nivelId ?? edificio.niveles[0].id, destinoId);
+    this.#cambiarEdificio(codigo, nivelId ?? edificio.inicio ?? edificio.niveles[0].id, destinoId);
     this.reloj.start();
     this.renderer.setAnimationLoop(() => this.#cuadro());
+  }
+
+  /** Cambia de bloque (por ejemplo, al cruzar el paso del Bloque B al Bloque A). */
+  #cambiarEdificio(codigo, nivelId, destinoId) {
+    const edificio = INTERIORES[codigo];
+    this.edificio = edificio;
+    this.codigo = codigo;
+    this.dom.edificio.textContent = edificio.nombre;
+    this.dom.niveles.innerHTML = [...edificio.niveles].sort((a, b) => b.id - a.id)
+      .map(n => `<button type="button" data-nivel="${n.id}">${n.corto}</button>`).join('');
+    this.#cargarNivel(nivelId, destinoId);
   }
 
   cerrar() {
@@ -109,6 +117,12 @@ export class Recorrido {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 0.95;
+    // Mapa de entorno: da reflejos suaves a pisos brillantes, vidrios y metales
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    this.entorno = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
     this.dom.escena.appendChild(this.renderer.domElement);
 
     this.etiquetas = new CSS2DRenderer();
@@ -190,11 +204,14 @@ export class Recorrido {
     const nivel = this.edificio.niveles.find(n => n.id === nivelId) ?? this.edificio.niveles[0];
     if (this.escena) liberar(this.escena);
     this.escena = new THREE.Scene();
-    this.escena.background = new THREE.Color('#2a3138');
-    this.escena.add(new THREE.HemisphereLight('#ffffff', '#a9adb2', 1.9));
-    this.escena.add(new THREE.AmbientLight('#ffffff', 0.75));
-    const luz = new THREE.DirectionalLight('#fff7ea', 0.55);
-    luz.position.set(3, 10, 6);
+    // Cielo claro detrás de las ventanas (de día, como en los videos)
+    this.escena.background = new THREE.Color(nivel.cielo ?? '#dbe6ee');
+    this.escena.environment = this.entorno;
+    this.escena.environmentIntensity = 0.45;
+    this.escena.add(new THREE.HemisphereLight('#fffaf0', '#7d776f', 1.05));
+    this.escena.add(new THREE.AmbientLight('#ffffff', 0.18));
+    const luz = new THREE.DirectionalLight('#fff3e0', 0.85);
+    luz.position.set(4, 10, 6);
     this.escena.add(luz);
 
     this.kit = new Kit(this.escena, nivel.estilo ?? {});
@@ -311,7 +328,11 @@ export class Recorrido {
       this.cambiando = true;
       this.teclas.clear();
       this.objetivo = null;
-      this.#fundido(() => { this.#cargarNivel(p.nivel, p.llegada); this.cambiando = false; });
+      this.#fundido(() => {
+        if (p.edificio && p.edificio !== this.codigo) this.#cambiarEdificio(p.edificio, p.nivel, p.llegada);
+        else this.#cargarNivel(p.nivel, p.llegada);
+        this.cambiando = false;
+      });
     }
   }
 
@@ -414,7 +435,7 @@ export class Kit {
   limitar(x0, z0, x1, z1) { this.limites = { x0, z0, x1, z1 }; }
   destino(id, nombre, x, z, yaw = 0, extra = {}) { this.destinos.push({ id, nombre, x, z, yaw, ...extra }); }
   zona(destino, x0, z0, x1, z1) { this.zonas.push({ destino, x0, z0, x1, z1 }); }
-  portal(x0, z0, x1, z1, nivel, llegada) { this.portales.push({ x0, z0, x1, z1, nivel, llegada }); }
+  portal(x0, z0, x1, z1, nivel, llegada, edificio) { this.portales.push({ x0, z0, x1, z1, nivel, llegada, edificio }); }
   obstaculo(x0, z0, x1, z1) { this.obstaculos.push({ x0: Math.min(x0, x1), z0: Math.min(z0, z1), x1: Math.max(x0, x1), z1: Math.max(z0, z1) }); }
 
   libre(x, z) {
@@ -452,10 +473,18 @@ export class Kit {
     g.rotation.y = rot;
     if (this.soloDatos) return g;
     this.escena.add(g);
-    if (solido) {
-      g.updateMatrixWorld(true);
-      const b = new THREE.Box3().setFromObject(g);
-      this.obstaculo(b.min.x, b.min.z, b.max.x, b.max.z);
+    g.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(g);
+    if (solido) this.obstaculo(b.min.x, b.min.z, b.max.x, b.max.z);
+    // Sombra suave de contacto bajo el mueble (da peso y realismo sin sombras en tiempo real)
+    if (y < 0.05 && b.max.y < 2.6 && !g.userData.sinSombra) {
+      const w = b.max.x - b.min.x, d = b.max.z - b.min.z;
+      if (w > 0.15 && d > 0.15 && w < 12 && d < 12) {
+        const s = new THREE.Mesh(new THREE.PlaneGeometry(w * 1.25 + 0.15, d * 1.25 + 0.15), mat('sombra'));
+        s.rotation.x = -Math.PI / 2;
+        s.position.set((b.min.x + b.max.x) / 2, 0.006, (b.min.z + b.max.z) / 2);
+        this.escena.add(s);
+      }
     }
     return g;
   }
@@ -483,7 +512,43 @@ export class Kit {
         this.pisables.push(piso);
       }
       const w = r.x1 - r.x0, d = r.z1 - r.z0;
-      this.caja(w, 0.1, d, 'techo', (r.x0 + r.x1) / 2, ALTO + 0.05, (r.z0 + r.z1) / 2);
+      if (r.sinTecho) continue;
+      this.caja(w, 0.1, d, this.estilo.techo === 'reticular' ? materialTechoReticular(w, d) : 'techo', (r.x0 + r.x1) / 2, ALTO + 0.05, (r.z0 + r.z1) / 2);
+    }
+    this.#fusionar();
+  }
+
+  /**
+   * Une en una sola malla por material todo lo que no se mueve (muebles, muros, marcos):
+   * pasa de miles de objetos a unas decenas y el recorrido va fluido aun en celulares.
+   */
+  #fusionar() {
+    const grupos = new Map();
+    const reservados = new Set([...this.pisables, ...this.opacos]);
+    this.escena.updateMatrixWorld(true);
+    this.escena.traverse(o => {
+      if (!o.isMesh || reservados.has(o) || o.userData.dinamico || Array.isArray(o.material)) return;
+      if (o.material.map && !o.material.userData.compartido) return;          // texturas únicas (letreros)
+      const clave = o.material.uuid;
+      if (!grupos.has(clave)) grupos.set(clave, []);
+      grupos.get(clave).push(o);
+    });
+    for (const lista of grupos.values()) {
+      if (lista.length < 2) continue;
+      const geos = [];
+      for (const o of lista) {
+        let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+        for (const n of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(n)) g.deleteAttribute(n);
+        if (!g.attributes.uv) continue;
+        g.applyMatrix4(o.matrixWorld);
+        geos.push(g);
+      }
+      const unida = geos.length > 1 ? mergeGeometries(geos, false) : null;
+      geos.forEach(g => g.dispose());
+      if (!unida) continue;
+      for (const o of lista) o.parent?.remove(o);
+      const m = new THREE.Mesh(unida, lista[0].material);
+      this.escena.add(m);
     }
   }
 
@@ -500,6 +565,7 @@ export class Kit {
     const L = Math.hypot(bx - ax, bz - az);
     const ux = (bx - ax) / L, uz = (bz - az) / L;
     const ang = Math.atan2(-(bz - az), bx - ax);
+    const franja = m === 'blancoFranja';
     const tramo = (t0, t1, y0, y1, material) => {
       if (t1 - t0 < 0.01 || y1 - y0 < 0.01 || this.soloDatos) return;
       const largo = t1 - t0, cx = ax + ux * (t0 + largo / 2), cz = az + uz * (t0 + largo / 2);
@@ -510,6 +576,15 @@ export class Kit {
       mesh.rotation.y = ang;
       this.escena.add(mesh);
       this.opacos.push(mesh);
+      // Zócalo oscuro y, en el Bloque A, la franja de madera a media altura
+      const bandas = y0 === 0 ? [[0, 0.1, 'zocalo']] : [];
+      if (franja && y0 < 0.9 && y1 > 1.0) bandas.push([0.86, 1.0, 'franja']);
+      for (const [b0, b1, mb] of bandas) {
+        const bm = new THREE.Mesh(new THREE.BoxGeometry(largo, b1 - b0, grosor + 0.03), mat(mb));
+        bm.position.set(cx, (b0 + b1) / 2, cz);
+        bm.rotation.y = ang;
+        this.escena.add(bm);
+      }
     };
     const material = materialMuro(m);
     const cortes = [...huecos.map(h => ({ t0: h[0], t1: h[1], tipo: 'hueco' })),
@@ -767,16 +842,22 @@ const cacheMat = new Map();
 export function mat(nombre) {
   if (cacheMat.has(nombre)) return cacheMat.get(nombre);
   const base = {
-    techo: { color: '#f5f5f3', roughness: 1, emissive: '#d9dad8', emissiveIntensity: 0.55 },
+    techo: { color: '#f3f3f1', roughness: 1, emissive: '#d9dad8', emissiveIntensity: 0.3 },
+    sombra: { color: '#000000', transparent: true, opacity: 0.32, depthWrite: false, alphaMap: texturaSombra(), roughness: 1, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2 },
     acero: { color: '#b9c0c6', metalness: 0.7, roughness: 0.3 },
     marco: { color: '#24272a', metalness: 0.3, roughness: 0.6 },
-    vidrio: { color: '#bcd6e2', transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0.2, depthWrite: false },
+    vidrio: { color: '#c9dde6', transparent: true, opacity: 0.2, roughness: 0.02, metalness: 0.5, depthWrite: false, envMapIntensity: 1.6 },
     esmerilado: { color: '#eef3f5', transparent: true, opacity: 0.82, roughness: 0.4 },
     mampara: { color: '#e4efeb', transparent: true, opacity: 0.42, roughness: 0.3, depthWrite: false },
     luz: { color: '#ffffff', emissive: '#ffffff', emissiveIntensity: 1.2 },
     tubo: { color: '#c7cbcf', metalness: 0.5, roughness: 0.5 },
     peldano: { map: texturaTerrazo('#cfcac2'), roughness: 0.7 },
-    puertaRoja: { color: '#7a2a1d', roughness: 0.6 },
+    puertaRoja: { map: texturaMadera('#6e2219', '#5a1a13'), roughness: 0.45 },
+    puertaNaranja: { map: texturaMadera('#c46a2c', '#a8541f'), roughness: 0.45 },
+    zocalo: { color: '#3b3330', roughness: 0.6 },
+    franja: { map: texturaMadera('#5e3a24', '#4a2d1b'), roughness: 0.5 },
+    tuboAmarillo: { color: '#f2c230', roughness: 0.45, metalness: 0.2 },
+    concreto: { color: '#bdb8b0', roughness: 0.95 },
     puertaBlanca: { color: '#f1f1ee', roughness: 0.6 },
     madera: { color: '#b88a5a', roughness: 0.8 },
     maderaOscura: { color: '#6b4426', roughness: 0.8 },
@@ -792,10 +873,11 @@ export function mat(nombre) {
 function materialMuro(tipo) {
   const clave = 'muro:' + tipo;
   if (cacheMat.has(clave)) return cacheMat.get(clave);
-  const m = tipo === 'ladrillo' ? new THREE.MeshStandardMaterial({ map: texturaLadrillo(), roughness: 0.9 })
+  const m = tipo === 'ladrillo' ? new THREE.MeshStandardMaterial({ map: texturaLadrillo(), bumpMap: texturaLadrillo(true), bumpScale: 2.5, roughness: 0.92 })
     : tipo === 'madera' ? new THREE.MeshStandardMaterial({ color: '#7a3f26', roughness: 0.7 })
     : tipo === 'crema' ? new THREE.MeshStandardMaterial({ color: '#efe6d6', roughness: 0.9 })
-    : new THREE.MeshStandardMaterial({ color: '#f2f1ed', roughness: 0.9 });
+    : tipo === 'concreto' ? new THREE.MeshStandardMaterial({ color: '#bdb8b0', roughness: 0.95 })
+    : new THREE.MeshStandardMaterial({ color: tipo === 'crema' ? '#efe6d6' : '#f1efea', map: texturaPanete(), roughness: 0.92 });
   m.userData.compartido = true;
   cacheMat.set(clave, m);
   return m;
@@ -803,10 +885,22 @@ function materialMuro(tipo) {
 
 function materialPiso(tipo, w, d) {
   // cada piso necesita su propia repetición de textura
-  const tex = tipo === 'baldosa' ? texturaBaldosa() : tipo === 'beige' ? texturaTerrazo('#d9c8a6', 128) : texturaTerrazo('#d6d5d0', 256);
+  const tex = tipo === 'baldosa' ? texturaBaldosa()
+    : tipo === 'beige' ? texturaTerrazo('#d8cab0', 256)
+    : tipo === 'granito' ? texturaGranito()
+    : tipo === 'vinotinto' ? texturaTerrazo('#76303a', 512, 0.6)
+    : tipo === 'rojizo' ? texturaTerrazo('#b9876a', 256)
+    : texturaTerrazo('#d9d8d3', 256);
   const esc = tipo === 'baldosa' ? 1.2 : 2;
   tex.repeat.set(w / esc, d / esc);
-  return new THREE.MeshStandardMaterial({ map: tex, roughness: tipo === 'baldosa' ? 0.18 : 0.45, metalness: 0.05 });
+  // pisos pulidos: poca rugosidad para que reflejen las lámparas como en los videos
+  return new THREE.MeshStandardMaterial({ map: tex, roughness: tipo === 'baldosa' ? 0.12 : 0.22, metalness: 0.0, envMapIntensity: 1.3 });
+}
+
+function materialTechoReticular(w, d) {
+  const tex = texturaReticular();
+  tex.repeat.set(w / 1.2, d / 1.2);
+  return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, emissive: '#77736c', emissiveIntensity: 0.35 });
 }
 
 /* ======================================================================== Texturas */
@@ -823,36 +917,129 @@ function textura(cv, repetir = true) {
   return t;
 }
 
-let cvLadrillo;
-function texturaLadrillo() {
+let cvLadrillo, cvLadrilloRelieve;
+/** Ladrillo a la vista naranja-rojizo de los pasillos (1 m × 1 m), con su mapa de relieve. */
+function texturaLadrillo(relieve = false) {
   if (!cvLadrillo) {
-    const [cv, g] = lienzo(256, 256);   // 1 m x 1 m
-    g.fillStyle = '#d6cfc4'; g.fillRect(0, 0, 256, 256);
-    const filas = 14, alto = 256 / filas, largo = 64;
+    const N = 512;
+    const [cv, g] = lienzo(N, N);
+    const [cr, r] = lienzo(N, N);
+    g.fillStyle = '#cfc6b8'; g.fillRect(0, 0, N, N);       // mortero
+    r.fillStyle = '#202020'; r.fillRect(0, 0, N, N);
+    const filas = 14, alto = N / filas, largo = N / 4;
     let semilla = 3;
     const azar = () => ((semilla = (semilla * 9301 + 49297) % 233280) / 233280);
     for (let f = 0; f < filas; f++) {
       const off = f % 2 ? largo / 2 : 0;
-      for (let x = -largo; x < 256 + largo; x += largo) {
-        const tono = 150 + azar() * 40;
-        g.fillStyle = `rgb(${tono + 35},${tono * 0.48},${tono * 0.3})`;
-        g.fillRect(x + off + 1.5, f * alto + 1.5, largo - 3, alto - 3);
+      for (let x = -largo; x < N + largo; x += largo) {
+        const t = azar();
+        const base = [196 + t * 30, 92 + t * 26, 58 + t * 18];
+        const x0 = x + off + 3, y0 = f * alto + 3, w = largo - 6, h = alto - 6;
+        const gr = g.createLinearGradient(x0, y0, x0, y0 + h);
+        gr.addColorStop(0, `rgb(${base[0] + 10},${base[1] + 8},${base[2] + 6})`);
+        gr.addColorStop(1, `rgb(${base[0] - 18},${base[1] - 12},${base[2] - 8})`);
+        g.fillStyle = gr; g.fillRect(x0, y0, w, h);
+        for (let i = 0; i < 40; i++) {                       // poros y manchas
+          g.fillStyle = `rgba(${azar() < 0.5 ? '60,25,15' : '240,190,160'},${0.08 + azar() * 0.12})`;
+          g.fillRect(x0 + azar() * w, y0 + azar() * h, 1 + azar() * 3, 1 + azar() * 2);
+        }
+        r.fillStyle = `rgb(${200 + t * 40},${200 + t * 40},${200 + t * 40})`; r.fillRect(x0, y0, w, h);
       }
     }
-    cvLadrillo = cv;
+    cvLadrillo = cv; cvLadrilloRelieve = cr;
   }
-  return textura(cvLadrillo);
+  return textura(relieve ? cvLadrilloRelieve : cvLadrillo);
 }
 
-function texturaTerrazo(base, lado = 256) {
+/** Degradado radial para las sombras de contacto. */
+function texturaSombra() {
+  const [cv, g] = lienzo(128, 128);
+  const gr = g.createRadialGradient(64, 64, 8, 64, 64, 64);
+  gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.55, '#8a8a8a'); gr.addColorStop(1, '#000000');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(cv);
+  return t;
+}
+
+/** Pañete blanco con leve textura (para que los muros no se vean planos). */
+let cvPanete;
+function texturaPanete() {
+  if (!cvPanete) {
+    const [cv, g] = lienzo(256, 256);
+    g.fillStyle = '#f4f2ee'; g.fillRect(0, 0, 256, 256);
+    let semilla = 5;
+    const azar = () => ((semilla = (semilla * 9301 + 49297) % 233280) / 233280);
+    for (let i = 0; i < 5000; i++) {
+      g.fillStyle = `rgba(${azar() < 0.5 ? '120,115,105' : '255,255,255'},${0.04 + azar() * 0.06})`;
+      g.fillRect(azar() * 256, azar() * 256, 1 + azar() * 3, 1 + azar() * 3);
+    }
+    cvPanete = cv;
+  }
+  return textura(cvPanete);
+}
+
+/** Vetas de madera para puertas y franjas. */
+function texturaMadera(a, b) {
+  const [cv, g] = lienzo(128, 256);
+  g.fillStyle = a; g.fillRect(0, 0, 128, 256);
+  let semilla = 11;
+  const azar = () => ((semilla = (semilla * 9301 + 49297) % 233280) / 233280);
+  g.strokeStyle = b; g.globalAlpha = 0.35;
+  for (let i = 0; i < 26; i++) {
+    g.lineWidth = 0.5 + azar() * 2;
+    const x = azar() * 128;
+    g.beginPath(); g.moveTo(x, 0);
+    for (let y = 0; y <= 256; y += 16) g.lineTo(x + Math.sin(y / 40 + i) * 3, y);
+    g.stroke();
+  }
+  g.globalAlpha = 1;
+  return textura(cv);
+}
+
+/** Granito beige con vetas (pisos altos del Bloque B y Bloque A). */
+function texturaGranito() {
+  const [cv, g] = lienzo(512, 512);
+  g.fillStyle = '#d7c7ae'; g.fillRect(0, 0, 512, 512);
+  let semilla = 21;
+  const azar = () => ((semilla = (semilla * 9301 + 49297) % 233280) / 233280);
+  for (let i = 0; i < 70; i++) {
+    g.fillStyle = `rgba(${150 + azar() * 60},${110 + azar() * 40},${80 + azar() * 30},0.25)`;
+    g.beginPath(); g.ellipse(azar() * 512, azar() * 512, 10 + azar() * 40, 5 + azar() * 18, azar() * 3, 0, 7); g.fill();
+  }
+  for (let i = 0; i < 9000; i++) {
+    const v = azar();
+    g.fillStyle = v < 0.5 ? 'rgba(90,70,55,0.5)' : v < 0.85 ? 'rgba(250,245,235,0.8)' : 'rgba(180,90,70,0.5)';
+    g.fillRect(azar() * 512, azar() * 512, 1 + azar() * 2.5, 1 + azar() * 2.5);
+  }
+  g.strokeStyle = 'rgba(120,105,90,0.35)'; g.lineWidth = 1.5;
+  for (const p of [0, 256, 512]) { g.beginPath(); g.moveTo(p, 0); g.lineTo(p, 512); g.stroke(); g.beginPath(); g.moveTo(0, p); g.lineTo(512, p); g.stroke(); }
+  return textura(cv);
+}
+
+/** Techo de concreto reticular a la vista del Bloque A (casetones de 1.2 m). */
+let cvReticular;
+function texturaReticular() {
+  if (!cvReticular) {
+    const [cv, g] = lienzo(256, 256);
+    g.fillStyle = '#a9a49c'; g.fillRect(0, 0, 256, 256);
+    const gr = g.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, '#8e8a83'); gr.addColorStop(0.5, '#b8b3ab'); gr.addColorStop(1, '#8e8a83');
+    g.fillStyle = gr; g.fillRect(26, 26, 204, 204);
+    g.fillStyle = '#c3beb6'; g.fillRect(44, 44, 168, 168);
+    cvReticular = cv;
+  }
+  return textura(cvReticular);
+}
+
+function texturaTerrazo(base, lado = 256, puntos = 1) {
   const [cv, g] = lienzo(512, 512);
   g.fillStyle = base; g.fillRect(0, 0, 512, 512);
   let semilla = 7;
   const azar = () => ((semilla = (semilla * 9301 + 49297) % 233280) / 233280);
-  for (let i = 0; i < 9000; i++) {
+  for (let i = 0; i < 9000 * puntos; i++) {
     const v = azar();
     g.fillStyle = v < 0.45 ? 'rgba(70,70,70,0.55)' : v < 0.8 ? 'rgba(255,255,255,0.8)' : 'rgba(140,120,100,0.5)';
-    const s = 1 + azar() * 2.5;
+    const s = (1 + azar() * 2.5) * (puntos < 1 ? 0.5 : 1);
     g.fillRect(azar() * 512, azar() * 512, s, s);
   }
   g.strokeStyle = 'rgba(120,120,120,0.35)'; g.lineWidth = 1.5;
