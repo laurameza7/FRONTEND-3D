@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ALTO, mat, lienzo, textura } from './recorrido.js';
+import { nivelesA, nivelesB } from './bloques.js';
 
 /*
  * Planos amoblados del interior de los bloques, hechos a partir de las fotos del campus.
@@ -342,23 +343,13 @@ function cafeteria(k) {
 export const INTERIORES = {
   A: {
     nombre: 'Bloque A',
-    niveles: [
-      {
-        id: 1, nombre: 'Piso 1 · Cafetería', corto: 'Piso 1', construir: cafeteria,
-        destinos: [
-          { id: 'entrada', nombre: 'Entrada de la cafetería', x: 0, z: 8.6, yaw: 0,
-            lugares: ['Cafetería'], claves: ['Cafetería', 'restaurante'] },
-          { id: 'barra', nombre: 'Barra de atención y caja', x: 0, z: -5.4, yaw: 0, aproximado: true,
-            nota: 'Distribución aproximada: se ajustará con los videos del campus.' },
-          { id: 'mesas', nombre: 'Zona de mesas', x: -1, z: 2.4, yaw: IZQ },
-          { id: 'microondas', nombre: 'Microondas', x: -11.6, z: -7.6, yaw: 0 },
-        ],
-      },
-    ],
+    inicio: 1,
+    niveles: nivelesA,
   },
   B: {
     nombre: 'Bloque B',
-    niveles: [
+    inicio: 1,
+    niveles: nivelesB([
       {
         id: 1, nombre: 'Piso 1 · Entrada', corto: 'Piso 1', construir: piso1,
         destinos: [
@@ -401,7 +392,7 @@ export const INTERIORES = {
             lugares: ['Clínica Odontológica (pregrado)'], claves: ['Clínica Odontológica'] },
         ],
       },
-    ],
+    ]),
   },
 };
 
@@ -909,3 +900,10 @@ function texturaEstante(tipo, w, h) {
     return textura(cv, false);
   });
 }
+
+/* Muebles y texturas que reutiliza el generador de pisos (pisos.js) */
+export {
+  lockers, banca, silla, escritorio, archivador, planta, canecas, cartelera, extintor,
+  mesaMadera, estanteria, taburete, caja, cilindro, memo, texturaLogoUcc, texturaTablero,
+  piso1, piso0, sotano2, cafeteria, barraCafeteria, caja1, nevera, microondas, texturaMenu, figuraRecortada,
+};
