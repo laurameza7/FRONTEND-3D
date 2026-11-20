@@ -7,6 +7,12 @@
 const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 export const WAKE_WORD = /^(?:(?:ey|oye|hey|ei|hei|ay|okey|ok|hola)\s+)?(?:coopi|copi|kopi|cupi|coopy|coopie|cooppi|kuppi|cuppy|coby|copy)\b[\s,.:]*/i;
 
+/**
+ * Navigation orders ("llévame a…", "quiero ir a…", "muéstrame…", "¿dónde queda…?"). In hands-free mode they are
+ * understood right away, without saying "Ey Coopi" first, so the visitor is taken there with no clicks.
+ */
+export const GO_COMMAND = /^[¿¡\s]*(?:por favor,?\s+)?(?:ll[eé]v[ae]me|ll[eé]vanos|quiero (?:ir|ver|entrar)|mu[eé]strame|mu[eé]strenme|ens[eé]ñame|vamos (?:a|al|para)|d[oó]nde (?:queda|est[aá]|es)|c[oó]mo (?:llego|voy)|ub[ií]came|gu[ií]ame|ir a|ir al|entrar a|entrar al)(?=\s|$)/i;
+
 export class Voice {
   constructor({ onQuestion, onActivate, onStatus }) {
     this.onQuestion = onQuestion;      // (text) => void
@@ -18,6 +24,7 @@ export class Voice {
     this.wakeMode = false;              // background listening with "Ey Coopi"
     this.waitingForQuestion = false;      // already said "Ey Coopi", the next sentence is the question
     this.speaking = false;
+    this.oneShot = false;                // the next sentence comes from the microphone button
     this.rec = null;
     if (this.canSpeak) speechSynthesis.onvoiceschanged = () => (this.spanishVoice = null);
   }
@@ -49,7 +56,8 @@ export class Voice {
 
   #hear(text) {
     if (!text || this.speaking) return;
-    if (!this.wakeMode) {                       // microphone button: everything said is the question
+    if (!this.wakeMode || this.oneShot) {       // microphone button: everything said is the question
+      this.oneShot = false;
       this.onQuestion?.(text.replace(WAKE_WORD, '').trim() || text);
       return;
     }
@@ -61,6 +69,8 @@ export class Voice {
     } else if (this.waitingForQuestion) {
       this.waitingForQuestion = false;
       this.onQuestion?.(text);
+    } else if (GO_COMMAND.test(text)) {       // "llévame a la facultad de ingeniería": no wake word needed
+      this.onQuestion?.(text);
     }
   }
 
@@ -70,6 +80,7 @@ export class Voice {
     this.stop();
     this.stopSpeaking();
     this.rec = this.#create(false);
+    this.oneShot = true;
     try { this.rec.start(); this.onStatus?.('listening'); } catch { /* it was already listening */ }
     return true;
   }
@@ -87,6 +98,7 @@ export class Voice {
   #listenInBackground() {
     if (!this.wakeMode || this.rec || this.speaking) return;
     this.rec = this.#create(true);
+    this.oneShot = false;
     try { this.rec.start(); this.onStatus?.(this.waitingForQuestion ? 'waiting' : 'wake'); } catch { this.rec = null; }
   }
 

@@ -101,6 +101,7 @@ async function greet(text) {
   addMessage(text, 'bot', { actions });
   voice.speak(text);
   setSuggestions(SUGGESTIONS);
+  startHandsFree();
 }
 
 let renewing = false;
@@ -487,7 +488,8 @@ async function ask(text) {
     thinking.remove();
     const withAction = r.action && COMMANDS[r.action.type];
     addMessage(r.answer, 'bot', { buildingId: withAction ? null : r.buildingId });
-    voice.speak(r.answer);
+    // When Coopi takes you somewhere it only says the first sentences, so it can listen again sooner
+    voice.speak(withAction ? r.answer.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ') : r.answer);
     if (withAction) setTimeout(() => COMMANDS[r.action.type](r.action), 400);
     else if (r.buildingId && !walkthrough.open) showBuilding(r.buildingId);
   } catch (e) {
@@ -530,7 +532,8 @@ const voice = new Voice({
 function paintWakeButton() {
   const b = $('#btn-wake');
   b.classList.toggle('active', voice.wakeMode);
-  b.innerHTML = `🎙️ «Ey Coopi»: <b>${voice.wakeMode ? 'listening' : 'off'}</b>`;
+  b.innerHTML = `🎙️ «Ey Coopi»: <b>${voice.wakeMode ? 'escuchando' : 'apagado'}</b>`;
+  $('#chat-header small').textContent = voice.wakeMode ? '🎙️ Te escucho: di «llévame a…»' : 'Asistente con IA del campus';
 }
 
 if (!voice.canListen) {
@@ -548,9 +551,31 @@ $('#btn-mic').addEventListener('click', () => {
 });
 $('#btn-wake').addEventListener('click', () => {
   const active = voice.wakeWord(!voice.wakeMode);
+  saveHandsFree(active);
   paintWakeButton();
-  if (active) addMessage('Te estoy escuchando. Di «Ey Coopi» y luego tu pregunta, por ejemplo: «Ey Coopi, llévame a la biblioteca».', 'bot');
+  if (active) addMessage(HANDS_FREE_HINT, 'bot');
 });
+
+/* Hands-free mode: after logging in Coopi keeps listening. "Llévame a la facultad de ingeniería" takes you
+   inside right away; any other question starts with "Ey Coopi". The «Ey Coopi» button turns it off. */
+const HANDS_FREE_KEY = 'ucc3d.handsFree';
+const HANDS_FREE_HINT = '🎙️ Te estoy escuchando. Dime por ejemplo «llévame a la facultad de ingeniería» y te llevo de una vez, '
+  + 'o di «Ey Coopi» y tu pregunta.';
+let handsFreeAnnounced = false;
+
+function saveHandsFree(on) {
+  try { localStorage.setItem(HANDS_FREE_KEY, on ? 'on' : 'off'); } catch { /* private mode */ }
+}
+
+function startHandsFree() {
+  if (!voice.canListen || voice.wakeMode) return;
+  let off = false;
+  try { off = localStorage.getItem(HANDS_FREE_KEY) === 'off'; } catch { /* private mode */ }
+  if (off) return;
+  voice.wakeWord(true);
+  paintWakeButton();
+  if (!handsFreeAnnounced) { handsFreeAnnounced = true; addMessage(HANDS_FREE_HINT, 'bot'); }
+}
 $('#btn-speak').addEventListener('click', () => {
   voice.speechOn = !voice.speechOn;
   if (!voice.speechOn) voice.stopSpeaking();
