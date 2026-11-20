@@ -1,0 +1,332 @@
+[
+ {
+  "nombre": "Admisiones, Registro y Control Académico (DARC)",
+  "tipo": "OFICINA",
+  "edificio": "B",
+  "piso": 1
+ },
+ {
+  "nombre": "Tesorería",
+  "tipo": "OFICINA",
+  "edificio": "B",
+  "piso": 1
+ },
+ {
+  "nombre": "Contabilidad",
+  "tipo": "OFICINA",
+  "edificio": "B",
+  "piso": 1
+ },
+ {
+  "nombre": "ICETEX y crédito estudiantil",
+  "tipo": "OFICINA",
+  "edificio": "B",
+  "piso": 1
+ },
+ {
+  "nombre": "AMI (Atención Más Integral)",
+  "tipo": "OFICINA",
+  "edificio": "B",
+  "piso": 1
+ },
+ {
+  "nombre": "Sala de espera del Piso 1",
+  "tipo": "SERVICIO",
+  "edificio": "B",
+  "piso": 1
+ },
+ {
+  "nombre": "Lockers de estudiantes",
+  "tipo": "SERVICIO",
+  "edificio": "B",
+  "piso": -1
+ },
+ {
+  "nombre": "Laboratorio de Morfología",
+  "tipo": "LABORATORIO",
+  "edificio": "B",
+  "piso": -1
+ },
+ {
+  "nombre": "Conexión subterránea con el Bloque A",
+  "tipo": "CIRCULACION",
+  "edificio": "B",
+  "piso": -2
+ },
+ {
+  "nombre": "Clínica Odontológica (pregrado)",
+  "tipo": "CLINICA",
+  "edificio": "B",
+  "piso": -2
+ },
+ {
+  "nombre": "Clínica Odontológica de Posgrado",
+  "tipo": "CLINICA",
+  "edificio": "B",
+  "piso": -2
+ },
+ {
+  "nombre": "Sala de espera de la Clínica Odontológica",
+  "tipo": "SERVICIO",
+  "edificio": "B",
+  "piso": -2
+ },
+ {
+  "nombre": "Atención al Usuario de la clínica",
+  "tipo": "SERVICIO",
+  "edificio": "B",
+  "piso": -2
+ },
+ {
+  "nombre": "Dental Deals",
+  "tipo": "SERVICIO",
+  "edificio": "B",
+  "piso": -2
+ },
+ {
+  "nombre": "Archivo de Historias Clínicas",
+  "tipo": "OFICINA",
+  "edificio": "B",
+  "piso": -2
+ },
+ {
+  "nombre": "Baños de la clínica",
+  "tipo": "SERVICIO",
+  "edificio": "B",
+  "piso": -2
+ },
+ {
+  "nombre": "Cafetería",
+  "tipo": "SERVICIO",
+  "edificio": "A",
+  "piso": 1
+ },
+ {
+  "nombre": "Biblioteca",
+  "tipo": "SERVICIO",
+  "edificio": "A",
+  "piso": 2
+ },
+ {
+  "nombre": "Auditorio",
+  "tipo": "SERVICIO",
+  "edificio": "A",
+  "piso": -1
+ },
+ {
+  "nombre": "Cancha sintética",
+  "tipo": "DEPORTIVO",
+  "edificio": "A",
+  "piso": 6
+ },
+ {
+  "nombre": "Cancha de voleibol",
+  "tipo": "DEPORTIVO",
+  "edificio": "A",
+  "piso": 6
+ },
+ {
+  "nombre": "Conexión subterránea con el Bloque B",
+  "tipo": "CIRCULACION",
+  "edificio": "A",
+  "piso": -1
+ },
+ {
+  "nombre": "Bienestar Universitario",
+  "tipo": "OFICINA",
+  "edificio": "B",
+  "piso": 1
+ },
+ {
+  "nombre": "Gimnasio",
+  "tipo": "DEPORTIVO",
+  "edificio": "B",
+  "piso": 1
+ },
+ {
+  "nombre": "Zona de descanso con puffs",
+  "tipo": "SERVICIO",
+  "edificio": "B",
+  "piso": 1
+ },
+ {
+  "nombre": "Apoyo Psicosocial",
+  "tipo": "OFICINA",
+  "edificio": "B",
+  "piso": 1
+ },
+ {
+  "nombre": "Coordinación Clínica",
+  "tipo": "OFICINA",
+  "edificio": "B",
+  "piso": -1
+ },
+ {
+  "nombre": "Centro de Administración Documental",
+  "tipo": "OFICINA",
+  "edificio": "B",
+  "piso": -1
+ },
+ {
+  "nombre": "Salones 301 a 305",
+  "tipo": "SALON",
+  "edificio": "B",
+  "piso": 2
+ },
+ {
+  "nombre": "Facultad de Medicina",
+  "tipo": "FACULTAD",
+  "edificio": "B",
+  "piso": 3
+ },
+ {
+  "nombre": "Coordinación del programa de Medicina",
+  "tipo": "OFICINA",
+  "edificio": "B",
+  "piso": 3
+ },
+ {
+  "nombre": "Facultad de Ingeniería",
+  "tipo": "FACULTAD",
+  "edificio": "B",
+  "piso": 4
+ },
+ {
+  "nombre": "Sala de profesores de Ingeniería",
+  "tipo": "OFICINA",
+  "edificio": "B",
+  "piso": 4
+ },
+ {
+  "nombre": "Laboratorios de Ingeniería Industrial",
+  "tipo": "LABORATORIO",
+  "edificio": "B",
+  "piso": 4
+ },
+ {
+  "nombre": "Salas de audiencia de Derecho",
+  "tipo": "SALON",
+  "edificio": "B",
+  "piso": 4
+ },
+ {
+  "nombre": "Facultad de Enfermería",
+  "tipo": "FACULTAD",
+  "edificio": "B",
+  "piso": 5
+ },
+ {
+  "nombre": "Facultad de Derecho",
+  "tipo": "FACULTAD",
+  "edificio": "B",
+  "piso": 5
+ },
+ {
+  "nombre": "Laboratorio de Innovación, Prototipado y Emprendimiento",
+  "tipo": "LABORATORIO",
+  "edificio": "B",
+  "piso": 6
+ },
+ {
+  "nombre": "Laboratorio de Operaciones",
+  "tipo": "LABORATORIO",
+  "edificio": "B",
+  "piso": 6
+ },
+ {
+  "nombre": "Auditorio Urcunina",
+  "tipo": "SALON",
+  "edificio": "B",
+  "piso": 7
+ },
+ {
+  "nombre": "Laboratorio de Simulación Clínica",
+  "tipo": "LABORATORIO",
+  "edificio": "A",
+  "piso": -1
+ },
+ {
+  "nombre": "Papelería",
+  "tipo": "SERVICIO",
+  "edificio": "A",
+  "piso": 1
+ },
+ {
+  "nombre": "Cajero BBVA",
+  "tipo": "SERVICIO",
+  "edificio": "A",
+  "piso": 1
+ },
+ {
+  "nombre": "Facultad de Odontología",
+  "tipo": "FACULTAD",
+  "edificio": "A",
+  "piso": 1
+ },
+ {
+  "nombre": "Laboratorio de Preclínica",
+  "tipo": "LABORATORIO",
+  "edificio": "A",
+  "piso": 1
+ },
+ {
+  "nombre": "Coordinación Clínica de Odontología",
+  "tipo": "OFICINA",
+  "edificio": "A",
+  "piso": 1
+ },
+ {
+  "nombre": "Sala de profesores de Medicina",
+  "tipo": "OFICINA",
+  "edificio": "A",
+  "piso": 2
+ },
+ {
+  "nombre": "Centro de Investigación",
+  "tipo": "OFICINA",
+  "edificio": "A",
+  "piso": 2
+ },
+ {
+  "nombre": "Laboratorio de Biología Molecular",
+  "tipo": "LABORATORIO",
+  "edificio": "A",
+  "piso": 2
+ },
+ {
+  "nombre": "Laboratorio de Realidad Mixta",
+  "tipo": "LABORATORIO",
+  "edificio": "A",
+  "piso": 2
+ },
+ {
+  "nombre": "Salas de Informática",
+  "tipo": "LABORATORIO",
+  "edificio": "A",
+  "piso": 3
+ },
+ {
+  "nombre": "Programa de Derecho",
+  "tipo": "OFICINA",
+  "edificio": "A",
+  "piso": 4
+ },
+ {
+  "nombre": "Centro de Investigaciones Sociojurídicas",
+  "tipo": "OFICINA",
+  "edificio": "A",
+  "piso": 4
+ },
+ {
+  "nombre": "Open Language Center",
+  "tipo": "OFICINA",
+  "edificio": "A",
+  "piso": 5
+ },
+ {
+  "nombre": "Salón de Arte, Música y Cultura",
+  "tipo": "SALON",
+  "edificio": "A",
+  "piso": 6
+ }
+]
