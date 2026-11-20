@@ -10,6 +10,8 @@
 }
 
 * { box-sizing: border-box; }
+/* El atributo hidden siempre oculta, aunque la clase defina display (p. ej. la pantalla de carga) */
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; overflow: hidden; }
 body {
   font-family: "Plus Jakarta Sans", system-ui, sans-serif;
