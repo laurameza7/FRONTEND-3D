@@ -1,8 +1,8 @@
-name: Probar frontend
+name: Test frontend
 
 on:
   push:
-    branches: [ main ]
+    branches: [ '**' ]
   pull_request:
 
 jobs:
@@ -16,22 +16,22 @@ jobs:
           cache: npm
       - run: npm ci
 
-      - name: Pruebas unitarias (Vitest)
+      - name: Unit tests (Vitest)
         run: npm test
 
-      - name: Compilar para producción
+      - name: Build for production
         run: npm run build
 
-      - name: Instalar Chromium para Playwright
+      - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
 
-      - name: Pruebas de extremo a extremo (Playwright)
+      - name: End-to-end tests (Playwright)
         run: npm run e2e
 
-      - name: Guardar reporte de Playwright
+      - name: Save Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reporte-playwright
+          name: playwright-report
           path: playwright-report/
           retention-days: 14

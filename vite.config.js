@@ -2,9 +2,9 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   build: { chunkSizeWarningLimit: 900 },
-  // Pruebas unitarias (npm test): DOM simulado con jsdom
+  // Unit tests (npm test): simulated DOM with jsdom
   test: {
     environment: 'jsdom',
-    include: ['pruebas/**/*.test.js'],
+    include: ['tests/**/*.test.js'],
   },
 });
