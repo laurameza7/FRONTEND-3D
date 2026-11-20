@@ -39,7 +39,7 @@ export async function apiFalsa(page, { respuestas = {} } = {}) {
 /** Entra como invitado y espera el saludo de Coopi. */
 export async function entrarComoInvitado(page) {
   await page.goto('/');
-  await page.locator('#acceso').waitFor({ state: 'visible', timeout: 45_000 });
+  await page.locator('#acceso').waitFor({ state: 'visible', timeout: 90_000 });
   await page.click('#acc-invitado');
   await page.locator('#mensajes .msg.bot').first().waitFor();
 }

@@ -4,8 +4,11 @@ import { defineConfig, devices } from '@playwright/test';
 // La API del backend se simula con datos reales del campus (e2e/datos), así no dependen de Render.
 export default defineConfig({
   testDir: 'e2e',
-  timeout: 60_000,
-  expect: { timeout: 15_000 },
+  // En GitHub Actions no hay GPU: el 3D se dibuja por software (SwiftShader) y todo va más lento,
+  // por eso allá se corre una prueba a la vez y con más tiempo de espera.
+  timeout: process.env.CI ? 180_000 : 60_000,
+  expect: { timeout: process.env.CI ? 45_000 : 15_000 },
+  workers: process.env.CI ? 1 : undefined,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {

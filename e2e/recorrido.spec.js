@@ -8,7 +8,7 @@ import { apiFalsa, entrarComoInvitado } from './apiFalsa.js';
  *  - que cada escalera o paso entre bloques lleve a un destino que existe.
  */
 test('todos los pisos se pueden recorrer y cada destino es alcanzable', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(240_000);
   await page.goto('/');
   const informe = await page.evaluate(async () => {
     const { Kit } = await import('/src/recorrido.js');

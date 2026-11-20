@@ -5,7 +5,7 @@ test.describe('Acceso al sistema', () => {
   test('la pantalla de carga da paso al ingreso y la contraseña está oculta y limitada a 30', async ({ page }) => {
     await apiFalsa(page);
     await page.goto('/');
-    await expect(page.locator('#acceso')).toBeVisible({ timeout: 45_000 });
+    await expect(page.locator('#acceso')).toBeVisible({ timeout: 90_000 });
     await expect(page.locator('#carga')).toBeHidden();
     const clave = page.locator('#acc-clave');
     await expect(clave).toHaveAttribute('type', 'password');
@@ -18,7 +18,7 @@ test.describe('Acceso al sistema', () => {
   test('al registrarse solo viaja la huella SHA-256, nunca la contraseña', async ({ page }) => {
     const peticiones = await apiFalsa(page);
     await page.goto('/');
-    await page.locator('#acceso').waitFor({ state: 'visible', timeout: 45_000 });
+    await page.locator('#acceso').waitFor({ state: 'visible', timeout: 90_000 });
     await page.click('.acc-pestanas button[data-modo="registro"]');
     await page.fill('#acc-nombre', 'Laura Meza');
     await page.fill('#acc-correo', 'laura@campusucc.edu.co');
@@ -42,7 +42,7 @@ test.describe('Acceso al sistema', () => {
   test('valida contraseñas cortas y que coincidan antes de enviar', async ({ page }) => {
     const peticiones = await apiFalsa(page);
     await page.goto('/');
-    await page.locator('#acceso').waitFor({ state: 'visible', timeout: 45_000 });
+    await page.locator('#acceso').waitFor({ state: 'visible', timeout: 90_000 });
     await page.click('.acc-pestanas button[data-modo="registro"]');
     await page.fill('#acc-nombre', 'Juan');
     await page.fill('#acc-correo', 'juan@campusucc.edu.co');
@@ -56,7 +56,7 @@ test.describe('Acceso al sistema', () => {
   test('muestra el mensaje del backend si la contraseña es incorrecta', async ({ page }) => {
     await apiFalsa(page);
     await page.goto('/');
-    await page.locator('#acceso').waitFor({ state: 'visible', timeout: 45_000 });
+    await page.locator('#acceso').waitFor({ state: 'visible', timeout: 90_000 });
     await page.fill('#acc-correo', 'manuel@campusucc.edu.co');
     await page.fill('#acc-clave', 'equivocada');
     await page.click('#acc-enviar');
