@@ -743,4 +743,4 @@ function texturaBacking() {
   });
 }
 
-export { texturaTablero };
+export { texturaTablero, puff, caminadora, bicicletaEstatica, mesaPingPong };

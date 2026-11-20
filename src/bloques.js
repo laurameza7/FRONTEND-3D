@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { ALTO, mat } from './recorrido.js';
-import { nivel, nombreNivel } from './pisos.js';
+import { nivel, nombreNivel, puff, caminadora, bicicletaEstatica } from './pisos.js';
 import {
   piso1, piso0, sotano2, barraCafeteria, caja1, nevera, microondas, texturaMenu, caja, cilindro,
-  estanteria, mesaMadera, silla, planta, canecas, lockers, banca, texturaLogoUcc,
+  estanteria, mesaMadera, silla, planta, canecas, lockers, banca, texturaLogoUcc, escritorio, archivador,
 } from './planos.js';
 
 /*
@@ -128,12 +128,45 @@ const B7 = nivel({
 /** Piso 1 del B (hecho a partir de las fotos) + escalera al Piso 2 y paso al Bloque A. */
 function piso1Completo(k) {
   piso1(k);
-  k.obstaculos = k.obstaculos.filter(o => !(o.x0 === -0.5 && o.z0 === -11.5));   // ya se puede subir
+  bienestar(k);
   k.portal(-0.5, -11.4, 2.0, -9.9, 2, 'esc0');
   k.letrero(['Sube a los pisos', '2 a 7'], 0.75, 2.6, -3.95, 0, 'piso');
   k.letrero(['Paso al Bloque A'], 2.5, 2.4, -11.9, 0, 'ucc');
   k.portal(2.05, -11.9, 2.95, -11.3, 1, 'desdeB', 'A');
 }
+/**
+ * Bienestar Universitario (a la derecha del hall del Piso 1, según el video): atención de Bienestar,
+ * Apoyo Psicosocial, zona de descanso con puffs azules y, al fondo, el gimnasio.
+ * Se entra por la puerta de vidrio del hall (x = 3, z ≈ 1).
+ */
+function bienestar(k) {
+  // Muro que separa la zona de atención del gimnasio, con paso libre junto a la puerta
+  k.muro(3, -4, 11, -4, { mat: 'ladrillo', huecos: [[0.4, 2.2]] });
+  k.letrero(['BIENESTAR', 'UNIVERSITARIO'], 2.9, 2.5, 2.2, DER, 'ucc');
+  k.letrero(['Gimnasio'], 7.5, 2.55, -3.95, 0, 'aviso-azul');
+
+  // Atención de Bienestar y de Apoyo Psicosocial (contra el muro del fondo, x = 11)
+  for (const [z, nombre] of [[1.6, 'BIENESTAR'], [-2.2, 'APOYO PSICOSOCIAL']]) {
+    k.colocar(escritorio(), 9.6, z, DER);
+    k.colocar(silla('#2c3e9e'), 8.0, z, IZQ);
+    k.letrero(nombre, 9.0, 2.45, z, DER, 'aviso-azul');
+  }
+  k.colocar(archivador(), 10.6, 2.6, DER);
+  k.colocar(planta(), 3.5, 2.5, 0);
+
+  // Zona de descanso: puffs azules
+  for (let i = 0; i < 6; i++) k.colocar(puff(), 6 + (i % 3) * 1.1, -0.6 - Math.floor(i / 3) * 1.4, i, false);
+
+  // Gimnasio: piso de caucho, caminadoras contra el muro y bicicletas estáticas
+  k.caja(7.8, 0.02, 7.8, mat('#2b2e31'), 7, 0.01, -8);
+  for (let z = -10.8; z <= -5.6; z += 1.3) k.colocar(caminadora(), 9.8, z, IZQ);
+  for (let z = -10.6; z <= -6.2; z += 1.1) k.colocar(bicicletaEstatica(), 6.8, z, IZQ);
+  k.lamparas(7, -11, 7, 2, { eje: 'z', paso: 4 });
+
+  k.zona('bienestar', 3, -4, 11, 3);
+  k.zona('gimnasio', 3, -12, 11, -4);
+}
+
 function sotano2Completo(k) {
   sotano2(k);
   k.letrero(['Paso al Bloque A', 'auditorio'], 9, 2.5, 15.9, PI, 'ucc');
@@ -456,6 +489,10 @@ export function nivelesB(base) {
   const [n1, n0, s2] = base;
   n1.construir = piso1Completo;
   n1.destinos = [...n1.destinos.filter(d => d.id !== 'escaleras'),
+    { id: 'bienestar', nombre: 'Bienestar Universitario · Apoyo Psicosocial', x: 4.4, z: 1.0, yaw: DER, aproximado: true,
+      lugares: ['Bienestar Universitario', 'Apoyo Psicosocial', 'Zona de descanso con puffs'],
+      claves: ['Bienestar', 'Psicosocial', 'puffs'] },
+    { id: 'gimnasio', nombre: 'Gimnasio', x: 4.6, z: -6.5, yaw: DER, aproximado: true, lugares: ['Gimnasio'], claves: ['gimnasio'] },
     { id: 'escaleras', nombre: 'Escaleras (sube y baja)', x: 0.75, z: -2.6, yaw: 0 },
     { id: 'esc0', nombre: 'Llegada desde el Piso 2', x: 0.75, z: -2.8, yaw: PI, oculto: true },
     { id: 'desdeA', nombre: 'Paso al Bloque A', x: 2.5, z: -10.4, yaw: PI, oculto: true }];

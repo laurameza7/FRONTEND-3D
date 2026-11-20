@@ -51,10 +51,8 @@ function piso1(k) {
   k.colocar(cartelera(0.9, 1.4, '#f4f4f4'), -2.9, 1.6, IZQ, false, 1.4);
   k.escalera(-2.9, -0.8, -4, -10, 'baja', { barandas: [false, true] });
   k.escalera(-0.5, 2.0, -4, -11.5, 'sube');
-  k.obstaculo(-0.5, -11.5, 2.0, -4);          // los pisos 2 a 7 aún no están en el recorrido
   k.letrero(['Piso 0 · Lockers', 'Clínica Odontológica'], -1.85, 2.55, -3.95, 0, 'colgate', 'escalera');
   k.letrero(['PISO 1 - Bloque B', 'first floor block b'], -2.9, 1.9, -3.1, IZQ, 'piso');
-  k.letrero(['Pisos 2 a 7', 'próximamente en el recorrido'], 0.75, 2.6, -3.95, 0, 'aviso-oscuro');
   k.portal(-2.9, -9, -0.8, -7.2, -1, 'llegada');
   k.lamparas(0, -2, 0, 2, { eje: 'z', paso: 3 });
 
@@ -78,17 +76,12 @@ function piso1(k) {
   k.colocar(planta(), 4.0, 14.3, 0);
   k.lamparas(7, 5, 7, 13, { eje: 'z', paso: 4 });
 
-  // Oficina junto a la escalera (sin registrar)
-  k.colocar(escritorio(), 8.5, -2, DER);
-  k.colocar(escritorio(), 8.5, -6, DER);
-  k.colocar(estanteria(2.4, 2.1, 'carpetas'), 7, -11.6, 0);
-  k.lamparas(7, -9, 7, 0, { eje: 'z', paso: 4 });
+  // A la derecha del hall: Bienestar Universitario y el gimnasio (los arma bloques.js → piso1Completo)
 
   k.zona('entrada', -3, 3, 3, 15);
   k.zona('sala', -3, -12, 3, 3);
   k.zona('tesoreria', -11, 3, -3, 15);
   k.zona('admisiones', 3, 3, 11, 15);
-  k.zona('oficina', 3, -12, 11, 3);
 }
 
 /* ======================================================================== Bloque B · Piso 0 (sótano 1) */
@@ -360,7 +353,6 @@ export const INTERIORES = {
             lugares: ['Tesorería', 'Contabilidad', 'ICETEX y crédito estudiantil', 'AMI (Atención Más Integral)'], claves: ['Tesorería', 'ICETEX'] },
           { id: 'sala', nombre: 'Sala de espera y escaleras', x: 0.4, z: -1.2, yaw: IZQ, lugares: ['Sala de espera del Piso 1'] },
           { id: 'escaleras', nombre: 'Bajada al Piso 0', x: -1.85, z: -2.4, yaw: 0 },
-          { id: 'oficina', nombre: 'Oficina (sin registrar)', x: 4.4, z: 1.0, yaw: DER, aproximado: true },
           { id: 'desdePiso0', nombre: 'Llegada desde el Piso 0', x: -1.85, z: -2.6, yaw: PI, oculto: true },
         ],
       },
