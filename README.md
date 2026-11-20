@@ -25,8 +25,10 @@ visitors of the Pasto campus.
   courts, clinic, Admisiones, Tesorería and more.
 - **Conversational Coopi**: greets "¡Hola! ¿Cómo estás? ¿En qué te puedo ayudar hoy?" and runs actions
   ("llévame al programa de Ingeniería de Software", "quiero ver el restaurante").
-- **Voice** (`src/voice.js`): microphone, «Ey Coopi» mode that listens in the background and spoken
-  answers (Chrome or Edge).
+- **Hands-free voice** (`src/voice.js`): after logging in Coopi keeps listening (the browser asks once for the
+  microphone). Saying «llévame a la facultad de ingeniería» walks you inside right away, with no clicks;
+  any other question starts with «Ey Coopi». The «Ey Coopi» button turns it off (and it is remembered).
+  Spoken answers and a microphone button for single questions (Chrome or Edge).
 - **First-person walkthrough of the interiors, as in the campus videos** (`src/floors.js` generates each
   floor, `src/blocks.js` describes it, `src/floorPlans.js` has the hand-made plans and `src/walkthrough.js`
   is the engine):
