@@ -1,0 +1,37 @@
+name: Probar frontend
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Pruebas unitarias (Vitest)
+        run: npm test
+
+      - name: Compilar para producción
+        run: npm run build
+
+      - name: Instalar Chromium para Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Pruebas de extremo a extremo (Playwright)
+        run: npm run e2e
+
+      - name: Guardar reporte de Playwright
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-playwright
+          path: playwright-report/
+          retention-days: 14
