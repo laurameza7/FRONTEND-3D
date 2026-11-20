@@ -7,8 +7,10 @@ export const data = { buildings: read('buildings'), places: read('places'), prog
  * Simulates the Java backend. `answers` decides what Coopi replies to each question.
  * Returns the log of requests so the test can check them.
  */
-export async function fakeApi(page, { answers = {} } = {}) {
+export async function fakeApi(page, { answers = {}, handsFree = false } = {}) {
   const requests = [];
+  // Hands-free voice is turned off unless the test is about it (the test browser has no microphone)
+  if (!handsFree) await page.addInitScript(() => localStorage.setItem('ucc3d.handsFree', 'off'));
   await page.route('**/api/**', async (route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
