@@ -8,12 +8,14 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "three": "^0.170.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "jsdom": "^25.0.1",
     "vite": "^6.0.0",
     "vitest": "^2.1.8"
