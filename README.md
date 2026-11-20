@@ -51,6 +51,23 @@ cp .env.example .env      # y poner la URL del backend (o http://localhost:8080)
 npm run dev
 ```
 
+## Pruebas
+
+```bash
+npm test          # pruebas unitarias con Vitest (≈100 casos, segundos)
+npm run e2e       # pruebas de extremo a extremo con Playwright en Chromium (escritorio y celular)
+```
+
+- **Unitarias** (`pruebas/`): la contraseña se convierte en una huella SHA-256 de 64 caracteres y nunca viaja,
+  el cliente de la API envía el token y muestra los errores del backend, la palabra «Ey Coopi» y sus variantes,
+  y que **cada lugar de la base de datos** de los bloques A y B tenga su destino en el piso correcto del recorrido.
+- **Extremo a extremo** (`e2e/`): se abre la aplicación real con la API simulada (datos reales del campus en
+  `e2e/datos`) y se prueba el ingreso, el registro sin enviar la contraseña, Coopi llevando a la biblioteca,
+  al gimnasio y a una facultad, la lista de programas, el cambio de piso y la vista de celular.
+  Además se arma cada uno de los 16 pisos y se comprueba que **todos los destinos son alcanzables caminando**.
+
+GitHub Actions corre las dos en cada push (pestaña **Actions**).
+
 ## Despliegue en Vercel
 
 1. Importar este repositorio en https://vercel.com/new (framework: **Vite**).
