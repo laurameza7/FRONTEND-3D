@@ -1,48 +1,48 @@
-// Cliente de la API del backend en Java.
-// La URL se configura con la variable de entorno VITE_API_URL (en Vercel).
+// Client for the Java backend API.
+// The URL is set with the VITE_API_URL environment variable (on Vercel).
 const BASE = (import.meta.env.VITE_API_URL || 'http://localhost:8080').replace(/\/$/, '');
 
 let token = null;
-let alExpirar = null;
+let onExpire = null;
 
-/** Error con el código HTTP y el mensaje que devolvió el backend. */
-export class ErrorApi extends Error {
-  constructor(estado, mensaje) { super(mensaje); this.estado = estado; }
+/** Error with the HTTP status and the message returned by the backend. */
+export class ApiError extends Error {
+  constructor(status, message) { super(message); this.status = status; }
 }
 
-async function pedir(ruta, opciones = {}) {
-  const cabeceras = { 'Content-Type': 'application/json' };
-  if (token) cabeceras.Authorization = 'Bearer ' + token;
-  const r = await fetch(BASE + ruta, { ...opciones, headers: cabeceras });
+async function request(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = 'Bearer ' + token;
+  const r = await fetch(BASE + path, { ...options, headers: headers });
   if (!r.ok) {
-    let mensaje = `Error ${r.status}`;
-    try { const j = await r.json(); mensaje = j.error || j.message || j.detail || mensaje; } catch { /* sin cuerpo */ }
-    if (r.status === 401 && token && !ruta.startsWith('/api/auth/')) alExpirar?.();
-    throw new ErrorApi(r.status, mensaje);
+    let message = `Error ${r.status}`;
+    try { const j = await r.json(); message = j.error || j.message || j.detail || message; } catch { /* no body */ }
+    if (r.status === 401 && token && !path.startsWith('/api/auth/')) onExpire?.();
+    throw new ApiError(r.status, message);
   }
   return r.json();
 }
 
-const enviar = (ruta, cuerpo) => pedir(ruta, { method: 'POST', body: JSON.stringify(cuerpo ?? {}) });
+const send = (path, body) => request(path, { method: 'POST', body: JSON.stringify(body ?? {}) });
 
 export const api = {
-  usarToken: (t) => { token = t; },
-  alExpirarSesion: (f) => { alExpirar = f; },
+  useToken: (t) => { token = t; },
+  onSessionExpired: (f) => { onExpire = f; },
 
-  // Campus (públicas)
-  salud: () => pedir('/api/salud'),
-  edificios: () => pedir('/api/edificios'),
-  lugares: () => pedir('/api/lugares'),
-  programas: () => pedir('/api/programas'),
-  programa: (id) => pedir('/api/programas/' + id),
+  // Campus (public)
+  health: () => request('/api/health'),
+  buildings: () => request('/api/buildings'),
+  places: () => request('/api/places'),
+  programs: () => request('/api/programs'),
+  program: (id) => request('/api/programs/' + id),
 
-  // Usuarios: la contraseña nunca viaja; solo su huella SHA-256 calculada en el navegador
-  registrar: (nombre, correo, huella) => enviar('/api/auth/registro', { nombre, correo, huella }),
-  ingresar: (correo, huella) => enviar('/api/auth/ingresar', { correo, huella }),
-  invitado: () => enviar('/api/auth/invitado'),
+  // Users: the password never travels; only its SHA-256 fingerprint computed in the browser
+  register: (name, email, fingerprint) => send('/api/auth/register', { name, email, fingerprint }),
+  login: (email, fingerprint) => send('/api/auth/login', { email, fingerprint }),
+  guest: () => send('/api/auth/guest'),
 
-  // Coopi (requieren sesión)
-  saludo: () => pedir('/api/asistente/saludo'),
-  historial: () => pedir('/api/asistente/historial'),
-  preguntar: (pregunta, programaId = null) => enviar('/api/asistente/preguntar', { pregunta, programaId }),
+  // Coopi (session required)
+  greeting: () => request('/api/assistant/greeting'),
+  history: () => request('/api/assistant/history'),
+  ask: (question, programId = null) => send('/api/assistant/ask', { question, programId }),
 };

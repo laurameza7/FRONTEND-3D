@@ -1,355 +1,355 @@
-import './estilos.css';
+import './styles.css';
 import { api } from './api.js';
 import { Campus3D } from './campus3d.js';
-import { Recorrido, tieneInterior, destinoDeLugar, destinoEnTexto } from './recorrido.js';
-import { pedirAcceso, sesionGuardada, cerrarSesion } from './sesion.js';
-import { Voz } from './voz.js';
+import { Walkthrough, hasInterior, destinationOfPlace, destinationInText } from './walkthrough.js';
+import { requestAccess, savedSession, logout } from './session.js';
+import { Voice } from './voice.js';
 
 const $ = (sel) => document.querySelector(sel);
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const normalizar = (s) => String(s ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const normalize = (s) => String(s ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 
-const datos = { edificios: [], lugares: [], programas: [] };
-let sesion = null;
-let programaActual = null;     // programa del que se está hablando con Coopi
+const data = { buildings: [], places: [], programs: [] };
+let session = null;
+let currentProgram = null;     // program being discussed with Coopi
 
-const campus = new Campus3D($('#escena'), { alSeleccionar: mostrarEdificio });
-const recorrido = new Recorrido({ alSalir: () => campus.pausar(false) });
-window.ucc3d = { campus, recorrido };   // acceso para depurar desde la consola
+const campus = new Campus3D($('#scene'), { onSelect: showBuilding });
+const walkthrough = new Walkthrough({ onExit: () => campus.pauseRendering(false) });
+window.ucc3d = { campus, walkthrough };   // access for debugging from the console
 
-/* ================================================================== Pantalla de carga */
-const carga = {
-  progreso(porcentaje, texto) {
-    $('#carga-progreso').style.width = porcentaje + '%';
-    if (texto) $('#carga-texto').textContent = texto;
+/* ================================================================== Loading screen */
+const loading = {
+  progressBar(percent, text) {
+    $('#loading-progress').style.width = percent + '%';
+    if (text) $('#loading-text').textContent = text;
   },
-  terminar() {
-    this.progreso(100, '¡Listo!');
-    setTimeout(() => $('#carga').classList.add('oculta'), 350);
-    setTimeout(() => { $('#carga').hidden = true; }, 900);
+  finish() {
+    this.progressBar(100, '¡Listo!');
+    setTimeout(() => $('#loading').classList.add('faded'), 350);
+    setTimeout(() => { $('#loading').hidden = true; }, 900);
   },
 };
 
-function estado(tipo, texto) {
-  const el = $('#estado');
-  el.className = 'estado ' + tipo;
-  el.querySelector('.texto').textContent = texto;
+function status(type, text) {
+  const el = $('#status');
+  el.className = 'status ' + type;
+  el.querySelector('.text').textContent = text;
 }
 
-async function cargarDatos() {
-  $('#carga-reintentar').hidden = true;
-  carga.progreso(15, 'Cargando el mapa del campus, espere un momento');
-  estado('', 'Conectando con el servidor…');
-  carga.progreso(30, 'Conectando con el servidor');
-  // El plan gratuito de Render "duerme" el backend; puede tardar ~1 minuto en despertar.
-  let avance = 30;
-  const aviso = setTimeout(() => {
-    $('#carga-aviso').hidden = false;
-    carga.progreso(avance, 'Cargando el mapa del campus, espere un momento');
-    estado('', 'Despertando el servidor (puede tardar un minuto)…');
+async function loadData() {
+  $('#loading-retry').hidden = true;
+  loading.progressBar(15, 'Cargando el mapa del campus, espere un momento');
+  status('', 'Conectando con el servidor…');
+  loading.progressBar(30, 'Conectando con el servidor');
+  // Render's free plan "puts the backend to sleep"; it can take ~1 minute to wake up.
+  let progress = 30;
+  const notice = setTimeout(() => {
+    $('#loading-notice').hidden = false;
+    loading.progressBar(progress, 'Cargando el mapa del campus, espere un momento');
+    status('', 'Despertando el servidor (puede tardar un minuto)…');
   }, 4000);
-  for (let intento = 1; intento <= 20; intento++) {
+  for (let attempt = 1; attempt <= 20; attempt++) {
     try {
-      const [edificios, lugares, programas] = await Promise.all([api.edificios(), api.lugares(), api.programas()]);
-      clearTimeout(aviso);
-      $('#carga-aviso').hidden = true;
-      carga.progreso(88, 'Construyendo el campus en 3D');
-      await new Promise(r => setTimeout(r, 30));       // deja pintar el mensaje
-      Object.assign(datos, { edificios, lugares, programas });
-      campus.cargar(edificios, lugares);
-      const bloques = edificios.filter(e => e.tipo === 'EDIFICIO').length;
-      estado('ok', `En línea · ${bloques} bloques · ${programas.length} programas`);
+      const [buildings, places, programs] = await Promise.all([api.buildings(), api.places(), api.programs()]);
+      clearTimeout(notice);
+      $('#loading-notice').hidden = true;
+      loading.progressBar(88, 'Construyendo el campus en 3D');
+      await new Promise(r => setTimeout(r, 30));       // lets the message be painted
+      Object.assign(data, { buildings, places, programs });
+      campus.load(buildings, places);
+      const blocks = buildings.filter(e => e.type === 'BUILDING').length;
+      status('ok', `En línea · ${blocks} bloques · ${programs.length} programas`);
       return true;
     } catch {
-      avance = Math.min(82, avance + 3);
-      carga.progreso(avance);
+      progress = Math.min(82, progress + 3);
+      loading.progressBar(progress);
       await new Promise(r => setTimeout(r, 5000));
     }
   }
-  clearTimeout(aviso);
-  estado('error', 'No se pudo conectar con el servidor');
-  carga.progreso(100, 'No se pudo conectar con el servidor');
-  $('#carga-aviso').hidden = true;
-  $('#carga-reintentar').hidden = false;
+  clearTimeout(notice);
+  status('error', 'No se pudo conectar con el servidor');
+  loading.progressBar(100, 'No se pudo conectar con el servidor');
+  $('#loading-notice').hidden = true;
+  $('#loading-retry').hidden = false;
   return false;
 }
 
-/* ================================================================== Sesión */
-async function iniciarSesion() {
-  const guardada = sesionGuardada();
-  if (guardada?.token) {
-    api.usarToken(guardada.token);
+/* ================================================================== Session */
+async function startSession() {
+  const saved = savedSession();
+  if (saved?.token) {
+    api.useToken(saved.token);
     try {
-      const { respuesta } = await api.saludo();     // valida que el token siga vigente
-      sesion = guardada;
-      return respuesta;
-    } catch { cerrarSesion(); }
+      const { answer } = await api.greeting();     // checks that the token is still valid
+      session = saved;
+      return answer;
+    } catch { logout(); }
   }
-  sesion = await pedirAcceso();
-  return (await api.saludo()).respuesta;
+  session = await requestAccess();
+  return (await api.greeting()).answer;
 }
 
-function mostrarUsuario() {
-  $('#usuario').hidden = !sesion;
-  $('#usuario-nombre').textContent = sesion ? (sesion.rol === 'INVITADO' ? '👤 Invitado' : '👤 ' + sesion.nombre.split(' ')[0]) : '';
+function showUser() {
+  $('#user').hidden = !session;
+  $('#user-name').textContent = session ? (session.role === 'GUEST' ? '👤 Invitado' : '👤 ' + session.name.split(' ')[0]) : '';
 }
 
-async function saludar(texto) {
-  abrirChat();
-  const acciones = sesion && sesion.rol !== 'INVITADO'
-    ? [{ texto: '🕘 Ver mis conversaciones anteriores', fn: verHistorial }] : [];
-  agregarMensaje(texto, 'bot', { acciones });
-  voz.hablar(texto);
-  ponerSugerencias(SUGERENCIAS);
+async function greet(text) {
+  openChat();
+  const actions = session && session.role !== 'GUEST'
+    ? [{ text: '🕘 Ver mis conversaciones anteriores', fn: showHistory }] : [];
+  addMessage(text, 'bot', { actions });
+  voice.speak(text);
+  setSuggestions(SUGGESTIONS);
 }
 
-let renovando = false;
-api.alExpirarSesion(async () => {
-  if (renovando) return;
-  renovando = true;
-  cerrarSesion();
-  agregarMensaje('Tu sesión terminó. Vuelve a ingresar para seguir hablando conmigo.', 'bot');
-  sesion = await pedirAcceso();
-  mostrarUsuario();
-  renovando = false;
-  saludar((await api.saludo()).respuesta);
+let renewing = false;
+api.onSessionExpired(async () => {
+  if (renewing) return;
+  renewing = true;
+  logout();
+  addMessage('Tu sesión terminó. Vuelve a ingresar para seguir hablando conmigo.', 'bot');
+  session = await requestAccess();
+  showUser();
+  renewing = false;
+  greet((await api.greeting()).answer);
 });
 
-$('#btn-salir').addEventListener('click', async () => {
-  voz.palabraClave(false);
-  voz.callar();
-  cerrarSesion();
-  sesion = null;
-  mostrarUsuario();
-  quitarPrograma();
-  $('#mensajes').innerHTML = '';
-  sesion = await pedirAcceso();
-  mostrarUsuario();
-  saludar((await api.saludo()).respuesta);
+$('#btn-logout').addEventListener('click', async () => {
+  voice.wakeWord(false);
+  voice.stopSpeaking();
+  logout();
+  session = null;
+  showUser();
+  clearProgram();
+  $('#messages').innerHTML = '';
+  session = await requestAccess();
+  showUser();
+  greet((await api.greeting()).answer);
 });
 
-async function verHistorial() {
+async function showHistory() {
   try {
-    const h = await api.historial();
-    if (!h.length) return agregarMensaje('Aún no tienes conversaciones guardadas conmigo.', 'bot');
-    agregarMensaje('Estas son tus últimas preguntas:\n' + h.slice(-8).map(m => `• ${m.pregunta}  (${m.fecha})`).join('\n'), 'bot');
+    const h = await api.history();
+    if (!h.length) return addMessage('Aún no tienes conversaciones guardadas conmigo.', 'bot');
+    addMessage('Estas son tus últimas preguntas:\n' + h.slice(-8).map(m => `• ${m.question}  (${m.date})`).join('\n'), 'bot');
   } catch {
-    agregarMensaje('No pude traer tu historial en este momento.', 'bot');
+    addMessage('No pude traer tu historial en este momento.', 'bot');
   }
 }
 
-/* ================================================================== Navegación */
-/** Entra caminando a un bloque (opcionalmente a un piso y lugar concretos). */
-function entrar(codigo, nivel, destino, { conChat = false } = {}) {
-  campus.pausar(true);
-  if (conChat) abrirChat();
-  else $('#chat').classList.add('cerrado');   // el chat queda minimizado para no tapar la vista
+/* ================================================================== Navigation */
+/** Walks into a block (optionally to a specific floor and place). */
+function enter(code, level, destination, { withChat = false } = {}) {
+  campus.pauseRendering(true);
+  if (withChat) openChat();
+  else $('#chat').classList.add('closed');   // the chat is minimized so it does not cover the view
   $('#panel').hidden = true;
-  if (recorrido.abierto && recorrido.codigo === codigo) recorrido.irA(nivel, destino);
+  if (walkthrough.open && walkthrough.code === code) walkthrough.goTo(level, destination);
   else {
-    if (recorrido.abierto) recorrido.cerrar();
-    campus.pausar(true);
-    recorrido.abrir(codigo, nivel, destino);
+    if (walkthrough.open) walkthrough.close();
+    campus.pauseRendering(true);
+    walkthrough.openAt(code, level, destination);
   }
 }
 
-function salirDelRecorrido() {
-  if (recorrido.abierto) recorrido.cerrar();
+function exitWalkthrough() {
+  if (walkthrough.open) walkthrough.close();
 }
 
-/** Lleva a un lugar: si tiene interior entra caminando; si no, lo muestra en el mapa. */
-function irALugar(lugar, opciones) {
-  if (!lugar) return false;
-  const e = datos.edificios.find(x => x.id === lugar.edificioId);
-  const d = e && destinoDeLugar(e.codigo, lugar.nombre);
-  if (d) { entrar(e.codigo, d.nivel, d.destino, opciones); return true; }
-  if (e) { salirDelRecorrido(); mostrarEdificio(e.id); }
+/** Goes to a place: if it has an interior it walks in; otherwise it shows it on the map. */
+function goToPlace(place, options) {
+  if (!place) return false;
+  const e = data.buildings.find(x => x.id === place.buildingId);
+  const d = e && destinationOfPlace(e.code, place.name);
+  if (d) { enter(e.code, d.level, d.destination, options); return true; }
+  if (e) { exitWalkthrough(); showBuilding(e.id); }
   return false;
 }
 
-/* ================================================================== Panel del bloque */
-function mostrarEdificio(id) {
-  const e = datos.edificios.find(x => x.id === id);
+/* ================================================================== Block panel */
+function showBuilding(id) {
+  const e = data.buildings.find(x => x.id === id);
   if (!e) return;
-  campus.seleccionar(id);
-  const lugares = datos.lugares.filter(l => l.edificioId === id);
-  const programas = datos.programas.filter(p => p.edificioId === id);
+  campus.select(id);
+  const places = data.places.filter(l => l.buildingId === id);
+  const programs = data.programs.filter(p => p.buildingId === id);
 
-  const chips = e.tipo === 'EDIFICIO'
-    ? `<span class="etiqueta" style="background:${esc(e.color)}">${e.pisos} pisos</span>
-       ${e.sotanos ? `<span class="etiqueta" style="background:#4f6d8f">${e.sotanos} sótanos</span>` : ''}`
-    : `<span class="etiqueta" style="background:#7b8a97">${e.tipo === 'ACCESO' ? 'Entrada' : 'Zona abierta'}</span>`;
+  const chips = e.type === 'BUILDING'
+    ? `<span class="label" style="background:${escapeHtml(e.color)}">${e.floors} pisos</span>
+       ${e.basements ? `<span class="label" style="background:#4f6d8f">${e.basements} sótanos</span>` : ''}`
+    : `<span class="label" style="background:#7b8a97">${e.type === 'ENTRANCE' ? 'Entrada' : 'Zona abierta'}</span>`;
 
-  // Pisos de arriba hacia abajo, incluidos los sótanos
-  let pisosHtml = '';
-  if (e.tipo === 'EDIFICIO') {
-    const niveles = [];
-    for (let p = e.pisos; p >= 1; p--) niveles.push(p);
-    for (let s = 1; s <= (e.sotanos || 0); s++) niveles.push(-s);
-    const etiquetaNivel = (p) => p > 0 ? 'Piso ' + p : (e.codigo === 'B' && p === -1 ? 'Piso 0 · Sót. 1' : 'Sótano ' + -p);
-    pisosHtml = `<h3>Piso por piso</h3><div class="pisos">${niveles.map(p => {
-      const aqui = lugares.filter(l => l.piso === p || (l.nombre === 'Biblioteca' && p === 3 && l.piso === 2));
-      return `<div class="piso ${p < 0 ? 'sotano' : ''}"><b>${etiquetaNivel(p)}</b>
-        <div class="contenido ${aqui.length ? '' : 'vacio'}">${aqui.length
-          ? aqui.map(l => {
-              const d = destinoDeLugar(e.codigo, l.nombre);
-              return `<div>${d ? `<button class="lugar-ir" type="button" data-codigo="${e.codigo}" data-nivel="${d.nivel}" data-destino="${d.destino}">🚶 Ir</button>` : ''}<strong>${esc(l.nombre)}</strong>${l.telefono ? `<span>☎ ${esc(l.telefono)}</span>` : ''}</div>`;
+  // Floors from top to bottom, including the basements
+  let floorsHtml = '';
+  if (e.type === 'BUILDING') {
+    const levels = [];
+    for (let p = e.floors; p >= 1; p--) levels.push(p);
+    for (let s = 1; s <= (e.basements || 0); s++) levels.push(-s);
+    const levelLabel = (p) => p > 0 ? 'Piso ' + p : (e.code === 'B' && p === -1 ? 'Piso 0 · Sót. 1' : 'Sótano ' + -p);
+    floorsHtml = `<h3>Piso por piso</h3><div class="floors">${levels.map(p => {
+      const here = places.filter(l => l.floor === p || (l.name === 'Biblioteca' && p === 3 && l.floor === 2));
+      return `<div class="floor ${p < 0 ? 'basement' : ''}"><b>${levelLabel(p)}</b>
+        <div class="content ${here.length ? '' : 'empty'}">${here.length
+          ? here.map(l => {
+              const d = destinationOfPlace(e.code, l.name);
+              return `<div>${d ? `<button class="place-go" type="button" data-code="${e.code}" data-level="${d.level}" data-destination="${d.destination}">🚶 Ir</button>` : ''}<strong>${escapeHtml(l.name)}</strong>${l.phone ? `<span>☎ ${escapeHtml(l.phone)}</span>` : ''}</div>`;
             }).join('')
           : 'Sin información registrada'}</div></div>`;
     }).join('')}</div>`;
-  } else if (lugares.length) {
-    pisosHtml = `<h3>Qué encuentras aquí</h3>${lugares.map(l => `
-      <div class="lugar"><strong>${esc(l.nombre)}</strong>${l.descripcion ? `<span>${esc(l.descripcion)}</span>` : ''}
-        ${l.telefono ? `<span>☎ ${esc(l.telefono)}</span>` : ''}</div>`).join('')}`;
+  } else if (places.length) {
+    floorsHtml = `<h3>Qué encuentras aquí</h3>${places.map(l => `
+      <div class="place"><strong>${escapeHtml(l.name)}</strong>${l.description ? `<span>${escapeHtml(l.description)}</span>` : ''}
+        ${l.phone ? `<span>☎ ${escapeHtml(l.phone)}</span>` : ''}</div>`).join('')}`;
   }
 
-  $('#panel-contenido').innerHTML = `
+  $('#panel-content').innerHTML = `
     <div class="chips">${chips}</div>
-    <h2>${esc(e.nombre)}</h2>
-    <p>${esc(e.descripcion)}</p>
-    ${tieneInterior(e.codigo) ? `<button class="btn-entrar" type="button" data-codigo="${e.codigo}">🚶 Entrar y recorrer el ${esc(e.nombre)} por dentro</button>` : ''}
-    ${pisosHtml}
-    ${programas.length ? `<h3>Programas con práctica aquí</h3>${programas.map(p => `
-      <div class="lugar" data-programa="${p.id}" style="cursor:pointer"><strong>${esc(p.nombre)}</strong><span>${esc(p.titulo)}</span></div>`).join('')}` : ''}
+    <h2>${escapeHtml(e.name)}</h2>
+    <p>${escapeHtml(e.description)}</p>
+    ${hasInterior(e.code) ? `<button class="btn-enter" type="button" data-code="${e.code}">🚶 Entrar y recorrer el ${escapeHtml(e.name)} por dentro</button>` : ''}
+    ${floorsHtml}
+    ${programs.length ? `<h3>Programas con práctica aquí</h3>${programs.map(p => `
+      <div class="place" data-program="${p.id}" style="cursor:pointer"><strong>${escapeHtml(p.name)}</strong><span>${escapeHtml(p.degreeTitle)}</span></div>`).join('')}` : ''}
   `;
   $('#panel').hidden = false;
 }
 
-$('#panel-contenido').addEventListener('click', (ev) => {
-  const prog = ev.target.closest('[data-programa]');
-  if (prog) return mostrarPrograma(datos.programas.find(p => p.id === Number(prog.dataset.programa)));
-  const acc = ev.target.closest('[data-accion]');
-  if (acc) return accionesPrograma[acc.dataset.accion]?.();
-  const b = ev.target.closest('.btn-entrar, .lugar-ir');
+$('#panel-content').addEventListener('click', (ev) => {
+  const prog = ev.target.closest('[data-program]');
+  if (prog) return showProgram(data.programs.find(p => p.id === Number(prog.dataset.program)));
+  const act = ev.target.closest('[data-action]');
+  if (act) return programActions[act.dataset.action]?.();
+  const b = ev.target.closest('.btn-enter, .place-go');
   if (!b) return;
-  entrar(b.dataset.codigo, b.dataset.nivel ? Number(b.dataset.nivel) : undefined, b.dataset.destino);
+  enter(b.dataset.code, b.dataset.level ? Number(b.dataset.level) : undefined, b.dataset.destination);
 });
 
-$('#cerrar-panel').addEventListener('click', () => {
+$('#close-panel').addEventListener('click', () => {
   $('#panel').hidden = true;
-  campus.deseleccionar();
+  campus.deselect();
 });
 
-/* ================================================================== Programas */
-const NIVELES = { PREGRADO: 'Pregrado', ESPECIALIZACION: 'Especialización', TECNICO: 'Técnico' };
-let filtroNivel = 'TODOS';
+/* ================================================================== Programs */
+const LEVELS = { UNDERGRADUATE: 'Pregrado', SPECIALIZATION: 'Especialización', TECHNICAL: 'Técnico' };
+let levelFilter = 'ALL';
 
-function abrirProgramas() {
-  salirDelRecorrido();
-  const niveles = ['TODOS', ...new Set(datos.programas.map(p => p.nivel))];
-  $('#programas-niveles').innerHTML = niveles.map(n =>
-    `<button type="button" data-nivel="${n}" class="${n === filtroNivel ? 'activo' : ''}">${n === 'TODOS' ? 'Todos' : NIVELES[n] ?? n}</button>`).join('');
-  pintarProgramas();
-  $('#programas').hidden = false;
-  setTimeout(() => $('#programas-buscar').focus(), 50);
+function openPrograms() {
+  exitWalkthrough();
+  const levels = ['ALL', ...new Set(data.programs.map(p => p.level))];
+  $('#programs-levels').innerHTML = levels.map(n =>
+    `<button type="button" data-level="${n}" class="${n === levelFilter ? 'active' : ''}">${n === 'ALL' ? 'Todos' : LEVELS[n] ?? n}</button>`).join('');
+  paintPrograms();
+  $('#programs').hidden = false;
+  setTimeout(() => $('#programs-search').focus(), 50);
 }
 
-function pintarProgramas() {
-  const q = normalizar($('#programas-buscar').value.trim());
-  const lista = datos.programas
-    .filter(p => filtroNivel === 'TODOS' || p.nivel === filtroNivel)
-    .filter(p => !q || normalizar(p.nombre + ' ' + p.facultad).includes(q))
-    .sort((a, b) => (a.nivel === 'PREGRADO' ? 0 : 1) - (b.nivel === 'PREGRADO' ? 0 : 1) || a.nombre.localeCompare(b.nombre));
-  $('#programas-lista').innerHTML = lista.length ? lista.map(p => `
-    <button type="button" class="tarjeta-programa" data-id="${p.id}">
-      <span class="nivel ${p.nivel}">${esc(NIVELES[p.nivel] ?? p.nivel)}</span>
-      <strong>${esc(p.nombre)}</strong>
-      <small>${esc(p.facultad)}${p.duracionSemestres ? ' · ' + p.duracionSemestres + ' semestres' : ''}</small>
+function paintPrograms() {
+  const q = normalize($('#programs-search').value.trim());
+  const list = data.programs
+    .filter(p => levelFilter === 'ALL' || p.level === levelFilter)
+    .filter(p => !q || normalize(p.name + ' ' + p.faculty).includes(q))
+    .sort((a, b) => (a.level === 'UNDERGRADUATE' ? 0 : 1) - (b.level === 'UNDERGRADUATE' ? 0 : 1) || a.name.localeCompare(b.name));
+  $('#programs-list').innerHTML = list.length ? list.map(p => `
+    <button type="button" class="program-card" data-id="${p.id}">
+      <span class="level ${p.level}">${escapeHtml(LEVELS[p.level] ?? p.level)}</span>
+      <strong>${escapeHtml(p.name)}</strong>
+      <small>${escapeHtml(p.faculty)}${p.durationSemesters ? ' · ' + p.durationSemesters + ' semestres' : ''}</small>
     </button>`).join('') : '<p class="modal-sub">No hay programas con ese nombre.</p>';
 }
 
-$('#btn-programas').addEventListener('click', abrirProgramas);
-$('#programas-buscar').addEventListener('input', pintarProgramas);
-$('#programas-niveles').addEventListener('click', (ev) => {
-  const b = ev.target.closest('button[data-nivel]');
+$('#btn-programs').addEventListener('click', openPrograms);
+$('#programs-search').addEventListener('input', paintPrograms);
+$('#programs-levels').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button[data-level]');
   if (!b) return;
-  filtroNivel = b.dataset.nivel;
-  $('#programas-niveles').querySelectorAll('button').forEach(x => x.classList.toggle('activo', x === b));
-  pintarProgramas();
+  levelFilter = b.dataset.level;
+  $('#programs-levels').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+  paintPrograms();
 });
-$('#programas-lista').addEventListener('click', (ev) => {
-  const b = ev.target.closest('.tarjeta-programa');
+$('#programs-list').addEventListener('click', (ev) => {
+  const b = ev.target.closest('.program-card');
   if (!b) return;
-  $('#programas').hidden = true;
-  mostrarPrograma(datos.programas.find(p => p.id === Number(b.dataset.id)));
+  $('#programs').hidden = true;
+  showProgram(data.programs.find(p => p.id === Number(b.dataset.id)));
 });
 
-const accionesPrograma = {
-  preguntar: () => { abrirChat(); $('#pregunta').focus(); },
-  inscribirme: () => preguntar(`¿Cómo me inscribo a ${programaActual.nombre}?`),
-  admisiones: () => irALugar(datos.lugares.find(l => normalizar(l.nombre).startsWith('admisiones'))),
-  bloque: () => mostrarEdificio(programaActual.edificioId),
-  facultad: () => irALugar(datos.lugares.find(l => l.id === programaActual.lugarId), { conChat: true }),
+const programActions = {
+  ask: () => { openChat(); $('#question').focus(); },
+  enroll: () => ask(`¿Cómo me inscribo a ${currentProgram.name}?`),
+  admissions: () => goToPlace(data.places.find(l => normalize(l.name).startsWith('admisiones'))),
+  block: () => showBuilding(currentProgram.buildingId),
+  faculty: () => goToPlace(data.places.find(l => l.id === currentProgram.placeId), { withChat: true }),
 };
 
-/** Ficha del programa en el panel lateral (sobre el mapa). */
-function fichaPrograma(p) {
-  salirDelRecorrido();
-  if (p.edificioId) campus.seleccionar(p.edificioId);
-  $('#panel-contenido').innerHTML = `
-    <div class="programa-detalle">
-      <div class="chips"><span class="etiqueta" style="background:#2e7d32">${esc(NIVELES[p.nivel] ?? p.nivel)}</span>
-        <span class="etiqueta" style="background:#4f6d8f">${esc(p.modalidad === 'HIBRIDA' ? 'Híbrida' : 'Presencial')}</span></div>
-      <h2>${esc(p.nombre)}</h2>
-      <p>${esc(p.facultad)}</p>
-      <div class="datos">
-        <div class="dato"><small>Duración</small><b>${p.duracionSemestres ? p.duracionSemestres + ' semestres' : '—'}</b></div>
-        <div class="dato"><small>Título</small><b>${esc(p.titulo ?? '—')}</b></div>
+/** Program card in the side panel (over the map). */
+function programCard(p) {
+  exitWalkthrough();
+  if (p.buildingId) campus.select(p.buildingId);
+  $('#panel-content').innerHTML = `
+    <div class="program-detail">
+      <div class="chips"><span class="label" style="background:#2e7d32">${escapeHtml(LEVELS[p.level] ?? p.level)}</span>
+        <span class="label" style="background:#4f6d8f">${escapeHtml(p.modality === 'HYBRID' ? 'Híbrida' : 'Presencial')}</span></div>
+      <h2>${escapeHtml(p.name)}</h2>
+      <p>${escapeHtml(p.faculty)}</p>
+      <div class="data">
+        <div class="data-item"><small>Duración</small><b>${p.durationSemesters ? p.durationSemesters + ' semestres' : '—'}</b></div>
+        <div class="data-item"><small>Título</small><b>${escapeHtml(p.degreeTitle ?? '—')}</b></div>
       </div>
-      <p>${esc(p.descripcion)}</p>
+      <p>${escapeHtml(p.description)}</p>
       <h3>¿Dónde?</h3>
-      ${p.lugar ? `<div class="lugar"><strong>${esc(p.lugar)}</strong><span>${esc(p.ubicacion ?? '')}</span></div>` : ''}
-      <div class="lugar"><strong>Inscripciones y matrícula</strong>
+      ${p.place ? `<div class="place"><strong>${escapeHtml(p.place)}</strong><span>${escapeHtml(p.location ?? '')}</span></div>` : ''}
+      <div class="place"><strong>Inscripciones y matrícula</strong>
         <span>Admisiones, Registro y Control Académico (DARC), Bloque B · piso 1.</span></div>
-      <div class="acciones-programa">
-        ${p.lugarId ? `<button type="button" class="principal" data-accion="facultad">🚶 Ir a la ${esc(p.lugar)}</button>` : ''}
-        <button type="button" ${p.lugarId ? '' : 'class="principal"'} data-accion="preguntar">💬 Preguntarle a Coopi sobre este programa</button>
-        <button type="button" data-accion="inscribirme">📝 ¿Cómo me inscribo?</button>
-        <button type="button" data-accion="admisiones">🚶 Ir a Admisiones (Bloque B)</button>
-        ${p.edificioId ? `<button type="button" data-accion="bloque">🏢 Ver su bloque en el mapa</button>` : ''}
+      <div class="program-actions">
+        ${p.placeId ? `<button type="button" class="primary" data-action="faculty">🚶 Ir a la ${escapeHtml(p.place)}</button>` : ''}
+        <button type="button" ${p.placeId ? '' : 'class="primary"'} data-action="ask">💬 Preguntarle a Coopi sobre este programa</button>
+        <button type="button" data-action="enroll">📝 ¿Cómo me inscribo?</button>
+        <button type="button" data-action="admissions">🚶 Ir a Admisiones (Bloque B)</button>
+        ${p.buildingId ? `<button type="button" data-action="block">🏢 Ver su bloque en el mapa</button>` : ''}
       </div>
     </div>`;
   $('#panel').hidden = false;
 }
 
 /**
- * Muestra un programa: ficha en el panel, el mapa se ubica y Coopi
- * pregunta en qué puede ayudar (las siguientes preguntas son sobre ese programa).
+ * Shows a program: card in the panel, the map moves to it and Coopi
+ * asks how it can help (the next questions are about that program).
  */
-function mostrarPrograma(p, { desdeCoopi = false } = {}) {
+function showProgram(p, { fromCoopi = false } = {}) {
   if (!p) return;
-  programaActual = p;
-  $('#programa-activo-nombre').textContent = p.nombre;
-  $('#programa-activo').hidden = false;
+  currentProgram = p;
+  $('#active-program-name').textContent = p.name;
+  $('#active-program').hidden = false;
 
-  // Si se conoce su facultad, se entra caminando hasta allá; si no, se muestra su ficha en el mapa
-  const facultad = p.lugarId && datos.lugares.find(l => l.id === p.lugarId);
-  const adentro = facultad && irALugar(facultad, { conChat: true });
-  if (!adentro) {
-    if (!p.edificioId) { campus.deseleccionar(); campus.vistaGeneral(); }
-    fichaPrograma(p);
+  // If its faculty is known, it walks there; otherwise its card is shown on the map
+  const faculty = p.placeId && data.places.find(l => l.id === p.placeId);
+  const inside = faculty && goToPlace(faculty, { withChat: true });
+  if (!inside) {
+    if (!p.buildingId) { campus.deselect(); campus.overview(); }
+    programCard(p);
   }
 
-  abrirChat();
-  if (!desdeCoopi) {
-    const donde = adentro ? ` Estás en la ${p.lugar} (${p.ubicacion}).` : '';
-    const texto = `¡Bienvenido al programa de ${p.nombre}! 🎓 Es de la ${p.facultad}`
-      + (p.duracionSemestres ? ` y dura ${p.duracionSemestres} semestres` : '') + `.${donde} ¿En qué te puedo ayudar con ${p.nombre}?`;
-    agregarMensaje(texto, 'bot', { acciones: adentro ? [{ texto: '📋 Ver la ficha del programa', fn: () => fichaPrograma(p) }] : [] });
-    voz.hablar(texto);
+  openChat();
+  if (!fromCoopi) {
+    const where = inside ? ` Estás en la ${p.place} (${p.location}).` : '';
+    const text = `¡Bienvenido al programa de ${p.name}! 🎓 Es de la ${p.faculty}`
+      + (p.durationSemesters ? ` y dura ${p.durationSemesters} semestres` : '') + `.${where} ¿En qué te puedo ayudar con ${p.name}?`;
+    addMessage(text, 'bot', { actions: inside ? [{ text: '📋 Ver la ficha del programa', fn: () => programCard(p) }] : [] });
+    voice.speak(text);
   }
-  ponerSugerencias([`¿Qué se estudia en ${p.nombre}?`, '¿Cuánto dura?', '¿Qué título otorga?', '¿Cómo me inscribo?']);
+  setSuggestions([`¿Qué se estudia en ${p.name}?`, '¿Cuánto dura?', '¿Qué título otorga?', '¿Cómo me inscribo?']);
 }
 
-function quitarPrograma() {
-  programaActual = null;
-  $('#programa-activo').hidden = true;
-  ponerSugerencias(SUGERENCIAS);
+function clearProgram() {
+  currentProgram = null;
+  $('#active-program').hidden = true;
+  setSuggestions(SUGGESTIONS);
 }
-$('#programa-activo-quitar').addEventListener('click', quitarPrograma);
+$('#active-program-clear').addEventListener('click', clearProgram);
 
-/* ================================================================== Lugares */
-const ICONOS = [
+/* ================================================================== Places */
+const ICONS = [
   [/cafeteria/, '🍽️', 'Restaurante · '], [/biblioteca/, '📚'], [/auditorio/, '🎭'], [/cancha sintetica/, '⚽'],
   [/voleibol/, '🏐'], [/clinica|odontolog/, '🦷'], [/admisiones/, '📝'], [/tesoreria|contabilidad/, '💳'],
   [/icetex/, '🎓'], [/ami/, '🤝'], [/lockers/, '🔐'], [/morfologia/, '🔬'], [/bonne vie|cafe/, '☕'],
@@ -357,225 +357,225 @@ const ICONOS = [
   [/porteria/, '🚪'], [/banos/, '🚻'], [/encuentro/, '🆘'], [/sala de espera/, '🪑'], [/archivo/, '🗂️'],
   [/dental deals/, '🛒'], [/conexion/, '↔️'],
 ];
-const iconoDe = (nombre) => ICONOS.find(([re]) => re.test(normalizar(nombre))) ?? [null, '📍', ''];
-const nombrePiso = (p) => (p < 0 ? `sótano ${-p}` : `piso ${p}`);
+const iconOf = (name) => ICONS.find(([re]) => re.test(normalize(name))) ?? [null, '📍', ''];
+const floorName = (p) => (p < 0 ? `sótano ${-p}` : `piso ${p}`);
 
-function abrirLugares() {
-  salirDelRecorrido();
-  const orden = (l) => (/cafeteria/.test(normalizar(l.nombre)) ? 0 : 1);
-  $('#lugares-lista').innerHTML = [...datos.lugares].sort((a, b) => orden(a) - orden(b)).map(l => {
-    const [, icono, prefijo = ''] = iconoDe(l.nombre);
-    const e = datos.edificios.find(x => x.id === l.edificioId);
-    const adentro = e && destinoDeLugar(e.codigo, l.nombre);
-    return `<button type="button" class="tarjeta-lugar" data-id="${l.id}">
-      <span class="icono-lugar">${icono}</span>
-      <strong>${esc(prefijo + l.nombre)}</strong>
-      <small>${esc((l.edificio ?? '').split(' - ')[0])} · ${nombrePiso(l.piso)}${adentro ? ' · 🚶 recorrido por dentro' : ''}</small>
+function openPlaces() {
+  exitWalkthrough();
+  const order = (l) => (/cafeteria/.test(normalize(l.name)) ? 0 : 1);
+  $('#places-list').innerHTML = [...data.places].sort((a, b) => order(a) - order(b)).map(l => {
+    const [, icon, prefix = ''] = iconOf(l.name);
+    const e = data.buildings.find(x => x.id === l.buildingId);
+    const inside = e && destinationOfPlace(e.code, l.name);
+    return `<button type="button" class="place-card" data-id="${l.id}">
+      <span class="place-icon">${icon}</span>
+      <strong>${escapeHtml(prefix + l.name)}</strong>
+      <small>${escapeHtml((l.building ?? '').split(' - ')[0])} · ${floorName(l.floor)}${inside ? ' · 🚶 recorrido por dentro' : ''}</small>
     </button>`;
   }).join('');
-  $('#lugares').hidden = false;
+  $('#places').hidden = false;
 }
 
-$('#btn-lugares').addEventListener('click', abrirLugares);
-$('#lugares-lista').addEventListener('click', (ev) => {
-  const b = ev.target.closest('.tarjeta-lugar');
+$('#btn-places').addEventListener('click', openPlaces);
+$('#places-list').addEventListener('click', (ev) => {
+  const b = ev.target.closest('.place-card');
   if (!b) return;
-  $('#lugares').hidden = true;
-  irALugar(datos.lugares.find(l => l.id === Number(b.dataset.id)));
+  $('#places').hidden = true;
+  goToPlace(data.places.find(l => l.id === Number(b.dataset.id)));
 });
 
 document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', (ev) => {
-  if (ev.target === m || ev.target.closest('[data-cerrar]')) m.hidden = true;
+  if (ev.target === m || ev.target.closest('[data-close]')) m.hidden = true;
 }));
 document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape') document.querySelectorAll('.modal').forEach(m => { m.hidden = true; });
 });
 
-/* ================================================================== Buscador */
-$('#buscar').addEventListener('input', (ev) => {
-  const q = normalizar(ev.target.value.trim());
-  const lista = $('#resultados');
-  if (q.length < 2) { lista.hidden = true; return; }
+/* ================================================================== Search */
+$('#search').addEventListener('input', (ev) => {
+  const q = normalize(ev.target.value.trim());
+  const list = $('#results');
+  if (q.length < 2) { list.hidden = true; return; }
 
   const items = [
-    ...datos.edificios.map(e => ({ titulo: e.nombre, sub: e.tipo === 'EDIFICIO' ? `${e.pisos} pisos · ${e.sotanos} sótanos` : 'Zona del campus', tipo: 'edificio', id: e.id })),
-    ...datos.lugares.map(l => ({ titulo: l.nombre, sub: `${l.edificio} · ${nombrePiso(l.piso)}`, tipo: 'lugar', id: l.id,
-      extra: /cafeteria/.test(normalizar(l.nombre)) ? 'restaurante comedor almuerzo' : '' })),
-    ...datos.programas.map(p => ({ titulo: p.nombre, sub: `Programa · ${p.facultad}`, tipo: 'programa', id: p.id })),
-  ].filter(i => normalizar(i.titulo + ' ' + (i.extra ?? '')).includes(q)).slice(0, 8);
+    ...data.buildings.map(e => ({ title: e.name, sub: e.type === 'BUILDING' ? `${e.floors} pisos · ${e.basements} sótanos` : 'Zona del campus', type: 'building', id: e.id })),
+    ...data.places.map(l => ({ title: l.name, sub: `${l.building} · ${floorName(l.floor)}`, type: 'place', id: l.id,
+      extra: /cafeteria/.test(normalize(l.name)) ? 'restaurante comedor almuerzo' : '' })),
+    ...data.programs.map(p => ({ title: p.name, sub: `Programa · ${p.faculty}`, type: 'program', id: p.id })),
+  ].filter(i => normalize(i.title + ' ' + (i.extra ?? '')).includes(q)).slice(0, 8);
 
-  lista.innerHTML = items.length
-    ? items.map(i => `<li data-tipo="${i.tipo}" data-id="${i.id}">${esc(i.titulo)}<small>${esc(i.sub)}</small></li>`).join('')
+  list.innerHTML = items.length
+    ? items.map(i => `<li data-type="${i.type}" data-id="${i.id}">${escapeHtml(i.title)}<small>${escapeHtml(i.sub)}</small></li>`).join('')
     : '<li>Sin resultados. Pregúntale a Coopi 👉</li>';
-  lista.hidden = false;
+  list.hidden = false;
 });
 
-$('#resultados').addEventListener('click', (ev) => {
-  const li = ev.target.closest('li[data-tipo]');
+$('#results').addEventListener('click', (ev) => {
+  const li = ev.target.closest('li[data-type]');
   if (!li) return;
   const id = Number(li.dataset.id);
-  if (li.dataset.tipo === 'programa') mostrarPrograma(datos.programas.find(p => p.id === id));
-  else if (li.dataset.tipo === 'lugar') irALugar(datos.lugares.find(l => l.id === id));
-  else mostrarEdificio(id);
-  $('#resultados').hidden = true;
-  $('#buscar').value = '';
+  if (li.dataset.type === 'program') showProgram(data.programs.find(p => p.id === id));
+  else if (li.dataset.type === 'place') goToPlace(data.places.find(l => l.id === id));
+  else showBuilding(id);
+  $('#results').hidden = true;
+  $('#search').value = '';
 });
 
-/* ================================================================== Chat con Coopi */
-const SUGERENCIAS = ['Llévame al programa de Ingeniería de Software', 'Quiero ver el restaurante', '¿Qué programas hay?', '¿Dónde queda la biblioteca?'];
+/* ================================================================== Chat with Coopi */
+const SUGGESTIONS = ['Llévame al programa de Ingeniería de Software', 'Quiero ver el restaurante', '¿Qué programas hay?', '¿Dónde queda la biblioteca?'];
 
-function abrirChat() { $('#chat').classList.remove('cerrado'); }
+function openChat() { $('#chat').classList.remove('closed'); }
 
-function ponerSugerencias(lista) {
-  $('#sugerencias').innerHTML = lista.map(s => `<button type="button">${esc(s)}</button>`).join('');
-  $('#sugerencias').hidden = false;
+function setSuggestions(list) {
+  $('#suggestions').innerHTML = list.map(s => `<button type="button">${escapeHtml(s)}</button>`).join('');
+  $('#suggestions').hidden = false;
 }
 
-function agregarMensaje(texto, quien, { edificioId, acciones = [] } = {}) {
-  const edificio = datos.edificios.find(x => x.id === edificioId);
-  const dentro = edificio && quien === 'bot' ? destinoEnTexto(edificio.codigo, texto) : null;
+function addMessage(text, who, { buildingId, actions = [] } = {}) {
+  const building = data.buildings.find(x => x.id === buildingId);
+  const insideTarget = building && who === 'bot' ? destinationInText(building.code, text) : null;
   const div = document.createElement('div');
-  div.className = 'msg ' + quien;
-  div.textContent = texto;
-  const botones = [...acciones];
-  if (edificio) botones.push({ texto: '📍 Ver en el mapa', fn: () => { salirDelRecorrido(); mostrarEdificio(edificioId); } });
-  if (dentro) botones.push({ texto: `🚶 Llévame a: ${dentro.nombre}`, fn: () => entrar(edificio.codigo, dentro.nivel, dentro.destino) });
-  if (botones.length) {
-    const caja = document.createElement('div');
-    caja.className = 'acciones';
-    for (const b of botones) {
+  div.className = 'msg ' + who;
+  div.textContent = text;
+  const buttons = [...actions];
+  if (building) buttons.push({ text: '📍 Ver en el mapa', fn: () => { exitWalkthrough(); showBuilding(buildingId); } });
+  if (insideTarget) buttons.push({ text: `🚶 Llévame a: ${insideTarget.name}`, fn: () => enter(building.code, insideTarget.level, insideTarget.destination) });
+  if (buttons.length) {
+    const box = document.createElement('div');
+    box.className = 'actions';
+    for (const b of buttons) {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.textContent = b.texto;
+      btn.textContent = b.text;
       btn.onclick = b.fn;
-      caja.append(btn);
+      box.append(btn);
     }
-    div.append(caja);
+    div.append(box);
   }
-  $('#mensajes').appendChild(div);
-  $('#mensajes').scrollTop = $('#mensajes').scrollHeight;
+  $('#messages').appendChild(div);
+  $('#messages').scrollTop = $('#messages').scrollHeight;
   return div;
 }
 
 /**
- * Patrón COMMAND: el backend responde con una acción y aquí se ejecuta
- * (abrir la lista de programas, ir a un programa, a un lugar o a un bloque).
+ * COMMAND pattern: the backend answers with an action and it is executed here
+ * (open the list of programs, go to a program, to a place or to a block).
  */
-const COMANDOS = {
-  VER_PROGRAMAS: () => abrirProgramas(),
-  IR_PROGRAMA: (a) => mostrarPrograma(datos.programas.find(p => p.id === a.programaId), { desdeCoopi: true }),
-  IR_LUGAR: (a) => irALugar(datos.lugares.find(l => l.id === a.lugarId)),
-  IR_EDIFICIO: (a) => { salirDelRecorrido(); mostrarEdificio(a.edificioId); },
-  SALUDO: () => {},
+const COMMANDS = {
+  SHOW_PROGRAMS: () => openPrograms(),
+  GO_TO_PROGRAM: (a) => showProgram(data.programs.find(p => p.id === a.programId), { fromCoopi: true }),
+  GO_TO_PLACE: (a) => goToPlace(data.places.find(l => l.id === a.placeId)),
+  GO_TO_BUILDING: (a) => { exitWalkthrough(); showBuilding(a.buildingId); },
+  GREETING: () => {},
 };
 
-async function preguntar(texto) {
-  texto = texto.trim();
-  if (!texto) return;
-  abrirChat();
-  agregarMensaje(texto, 'usuario');
-  $('#pregunta').value = '';
-  $('#sugerencias').hidden = true;
-  const boton = $('#form-chat button[type=submit]');
-  boton.disabled = true;
-  const pensando = agregarMensaje('Coopi está escribiendo…', 'bot escribiendo');
+async function ask(text) {
+  text = text.trim();
+  if (!text) return;
+  openChat();
+  addMessage(text, 'user');
+  $('#question').value = '';
+  $('#suggestions').hidden = true;
+  const button = $('#chat-form button[type=submit]');
+  button.disabled = true;
+  const thinking = addMessage('Coopi está escribiendo…', 'bot typing');
   try {
-    const r = await api.preguntar(texto, programaActual?.id ?? null);
-    pensando.remove();
-    const conAccion = r.accion && COMANDOS[r.accion.tipo];
-    agregarMensaje(r.respuesta, 'bot', { edificioId: conAccion ? null : r.edificioId });
-    voz.hablar(r.respuesta);
-    if (conAccion) setTimeout(() => COMANDOS[r.accion.tipo](r.accion), 400);
-    else if (r.edificioId && !recorrido.abierto) mostrarEdificio(r.edificioId);
+    const r = await api.ask(text, currentProgram?.id ?? null);
+    thinking.remove();
+    const withAction = r.action && COMMANDS[r.action.type];
+    addMessage(r.answer, 'bot', { buildingId: withAction ? null : r.buildingId });
+    voice.speak(r.answer);
+    if (withAction) setTimeout(() => COMMANDS[r.action.type](r.action), 400);
+    else if (r.buildingId && !walkthrough.open) showBuilding(r.buildingId);
   } catch (e) {
-    pensando.remove();
-    if (e.estado !== 401) agregarMensaje('No pude conectarme con el servidor. Intenta de nuevo en unos segundos.', 'bot');
+    thinking.remove();
+    if (e.status !== 401) addMessage('No pude conectarme con el servidor. Intenta de nuevo en unos segundos.', 'bot');
   } finally {
-    boton.disabled = false;
+    button.disabled = false;
   }
 }
 
-$('#form-chat').addEventListener('submit', (ev) => {
+$('#chat-form').addEventListener('submit', (ev) => {
   ev.preventDefault();
-  preguntar($('#pregunta').value);
+  ask($('#question').value);
 });
-$('#sugerencias').addEventListener('click', (ev) => {
-  if (ev.target.tagName === 'BUTTON') preguntar(ev.target.textContent);
+$('#suggestions').addEventListener('click', (ev) => {
+  if (ev.target.tagName === 'BUTTON') ask(ev.target.textContent);
 });
-$('#chat-cabecera').addEventListener('click', () => $('#chat').classList.toggle('cerrado'));
-if (window.innerWidth < 760) $('#chat').classList.add('cerrado');
+$('#chat-header').addEventListener('click', () => $('#chat').classList.toggle('closed'));
+if (window.innerWidth < 760) $('#chat').classList.add('closed');
 
-/* ================================================================== Voz: "Ey Coopi" */
-const voz = new Voz({
-  alPreguntar: (texto) => preguntar(texto),
-  alActivarse: () => {
-    abrirChat();
+/* ================================================================== Voice: "Ey Coopi" */
+const voice = new Voice({
+  onQuestion: (text) => ask(text),
+  onActivate: () => {
+    openChat();
     const t = '¡Hola! ¿Cómo estás? ¿En qué te puedo ayudar hoy?';
-    agregarMensaje(t, 'bot');
-    voz.hablar(t);
+    addMessage(t, 'bot');
+    voice.speak(t);
   },
-  alEstado: (e, detalle) => {
-    $('#btn-mic').classList.toggle('escuchando', e === 'escuchando' || e === 'esperando');
-    $('#pregunta').placeholder = e === 'escuchando' || e === 'esperando' ? 'Te escucho…' : 'Escribe o habla con Coopi…';
-    pintarBotonClave();
-    if (e === 'error' && detalle) agregarMensaje(detalle, 'bot');
+  onStatus: (e, detail) => {
+    $('#btn-mic').classList.toggle('listening', e === 'listening' || e === 'waiting');
+    $('#question').placeholder = e === 'listening' || e === 'waiting' ? 'Te escucho…' : 'Escribe o habla con Coopi…';
+    paintWakeButton();
+    if (e === 'error' && detail) addMessage(detail, 'bot');
   },
 });
 
-function pintarBotonClave() {
-  const b = $('#btn-clave');
-  b.classList.toggle('activo', voz.modoClave);
-  b.innerHTML = `🎙️ «Ey Coopi»: <b>${voz.modoClave ? 'escuchando' : 'apagado'}</b>`;
+function paintWakeButton() {
+  const b = $('#btn-wake');
+  b.classList.toggle('active', voice.wakeMode);
+  b.innerHTML = `🎙️ «Ey Coopi»: <b>${voice.wakeMode ? 'listening' : 'off'}</b>`;
 }
 
-if (!voz.puedeEscuchar) {
-  for (const id of ['#btn-clave', '#btn-mic']) {
+if (!voice.canListen) {
+  for (const id of ['#btn-wake', '#btn-mic']) {
     $(id).disabled = true;
     $(id).title = 'Tu navegador no permite hablar por voz. Usa Google Chrome o Microsoft Edge.';
   }
 }
-$('#btn-hablar').classList.toggle('activo', voz.hablarActivo);
-$('#btn-hablar').disabled = !voz.puedeHablar;
+$('#btn-speak').classList.toggle('active', voice.speechOn);
+$('#btn-speak').disabled = !voice.canSpeak;
 
 $('#btn-mic').addEventListener('click', () => {
-  if ($('#btn-mic').classList.contains('escuchando') && !voz.modoClave) return voz.detener();
-  voz.escucharUnaVez();
+  if ($('#btn-mic').classList.contains('listening') && !voice.wakeMode) return voice.stop();
+  voice.listenOnce();
 });
-$('#btn-clave').addEventListener('click', () => {
-  const activo = voz.palabraClave(!voz.modoClave);
-  pintarBotonClave();
-  if (activo) agregarMensaje('Te estoy escuchando. Di «Ey Coopi» y luego tu pregunta, por ejemplo: «Ey Coopi, llévame a la biblioteca».', 'bot');
+$('#btn-wake').addEventListener('click', () => {
+  const active = voice.wakeWord(!voice.wakeMode);
+  paintWakeButton();
+  if (active) addMessage('Te estoy escuchando. Di «Ey Coopi» y luego tu pregunta, por ejemplo: «Ey Coopi, llévame a la biblioteca».', 'bot');
 });
-$('#btn-hablar').addEventListener('click', () => {
-  voz.hablarActivo = !voz.hablarActivo;
-  if (!voz.hablarActivo) voz.callar();
-  $('#btn-hablar').classList.toggle('activo', voz.hablarActivo);
-  $('#btn-hablar').textContent = voz.hablarActivo ? '🔊 Voz' : '🔇 Sin voz';
+$('#btn-speak').addEventListener('click', () => {
+  voice.speechOn = !voice.speechOn;
+  if (!voice.speechOn) voice.stopSpeaking();
+  $('#btn-speak').classList.toggle('active', voice.speechOn);
+  $('#btn-speak').textContent = voice.speechOn ? '🔊 Voz' : '🔇 Sin voz';
 });
 
-/* ================================================================== Controles de vista */
-$('#btn-sotanos').addEventListener('click', (ev) => {
-  const activo = campus.alternarSotanos();
-  ev.currentTarget.classList.toggle('activo', activo);
-  ev.currentTarget.textContent = activo ? 'Ocultar sótanos' : 'Ver sótanos';
+/* ================================================================== View controls */
+$('#btn-basements').addEventListener('click', (ev) => {
+  const active = campus.toggleBasements();
+  ev.currentTarget.classList.toggle('active', active);
+  ev.currentTarget.textContent = active ? 'Ocultar sótanos' : 'Ver sótanos';
 });
-$('#btn-vista').addEventListener('click', () => {
+$('#btn-view').addEventListener('click', () => {
   $('#panel').hidden = true;
-  campus.deseleccionar();
-  campus.vistaGeneral();
+  campus.deselect();
+  campus.overview();
 });
 
-/* ================================================================== Inicio */
-async function iniciar() {
-  if (!(await cargarDatos())) return;
-  carga.terminar();
+/* ================================================================== Start */
+async function begin() {
+  if (!(await loadData())) return;
+  loading.finish();
   try {
-    const saludo = await iniciarSesion();
-    mostrarUsuario();
-    saludar(saludo);
+    const greeting = await startSession();
+    showUser();
+    greet(greeting);
   } catch {
-    agregarMensaje('No pude conectarme con el servidor. Recarga la página en unos segundos.', 'bot');
+    addMessage('No pude conectarme con el servidor. Recarga la página en unos segundos.', 'bot');
   }
 }
-$('#carga-reintentar').addEventListener('click', iniciar);
-iniciar();
+$('#loading-retry').addEventListener('click', begin);
+begin();

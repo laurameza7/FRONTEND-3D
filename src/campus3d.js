@@ -4,43 +4,43 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 
 /*
- * Modelo 3D del campus Pasto (Calle 18 N.º 45-150, Torobajo).
- * Coordenadas en metros: x hacia la Carrera 45 (oriente), z hacia la Calle 18 (frente).
- * Los edificios llegan del backend; calles, barrio y vegetación son decorado.
+ * 3D model of the Pasto campus (Calle 18 N.º 45-150, Torobajo).
+ * Coordinates in meters: x towards Carrera 45 (east), z towards Calle 18 (front).
+ * The buildings come from the backend; streets, neighborhood and vegetation are decoration.
  */
-const ALTURA_PISO = 3.6;
-const ALTURA_SOTANO = 3.2;
-const SEPARACION_SOTANOS = 9;  // en la vista de sótanos los niveles se separan para leerlos
-const CALLE_18_Z = 40;     // eje de la Calle 18
-const CARRERA_45_X = 54;   // eje de la Carrera 45
-const VISTA_GENERAL = { camara: new THREE.Vector3(-58, 52, 88), objetivo: new THREE.Vector3(10, 6, -10) };
-const VISTA_SOTANOS = { camara: new THREE.Vector3(-30, 14, 70), objetivo: new THREE.Vector3(12, -10, -12) };
+const FLOOR_HEIGHT = 3.6;
+const BASEMENT_HEIGHT = 3.2;
+const BASEMENT_GAP = 9;  // in the basement view the levels are separated so they can be read
+const STREET_18_Z = 40;     // axis of Calle 18
+const AVENUE_45_X = 54;   // axis of Carrera 45
+const OVERVIEW_VIEW = { camera: new THREE.Vector3(-58, 52, 88), goal: new THREE.Vector3(10, 6, -10) };
+const BASEMENTS_VIEW = { camera: new THREE.Vector3(-30, 14, 70), goal: new THREE.Vector3(12, -10, -12) };
 
 export class Campus3D {
-  constructor(contenedor, { alSeleccionar } = {}) {
-    this.contenedor = contenedor;
-    this.alSeleccionar = alSeleccionar;
-    this.bloques = new Map();       // id -> { grupo, etiqueta, datos, materiales }
-    this.seleccionado = null;
-    this.animacion = null;
-    this.sotanosVisibles = false;
+  constructor(container, { onSelect } = {}) {
+    this.container = container;
+    this.onSelect = onSelect;
+    this.blocks = new Map();       // id -> { group, label, data, materials }
+    this.selected = null;
+    this.animation = null;
+    this.basementsVisible = false;
 
-    this.#crearEscena();
-    this.#crearEntorno();
-    this.#eventos();
-    this.renderer.setAnimationLoop(() => this.#cuadro());
+    this.#createScene();
+    this.#createEnvironment();
+    this.#events();
+    this.renderer.setAnimationLoop(() => this.#picture());
   }
 
-  /* ================================================================ Escena base */
-  #crearEscena() {
-    const { clientWidth: w, clientHeight: h } = this.contenedor;
+  /* ================================================================ Base scene */
+  #createScene() {
+    const { clientWidth: w, clientHeight: h } = this.container;
 
-    this.escena = new THREE.Scene();
-    this.escena.background = new THREE.Color('#dce8f2');
-    this.escena.fog = new THREE.Fog('#dce8f2', 220, 420);
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color('#dce8f2');
+    this.scene.fog = new THREE.Fog('#dce8f2', 220, 420);
 
-    this.camara = new THREE.PerspectiveCamera(42, w / h, 0.5, 900);
-    this.camara.position.copy(VISTA_GENERAL.camara);
+    this.camera = new THREE.PerspectiveCamera(42, w / h, 0.5, 900);
+    this.camera.position.copy(OVERVIEW_VIEW.camera);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -50,685 +50,685 @@ export class Campus3D {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.1;
-    // Reflejos suaves del cielo en vidrios y metales
+    // Soft sky reflections on glass and metal
     const pmrem = new THREE.PMREMGenerator(this.renderer);
-    this.escena.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    this.escena.environmentIntensity = 0.35;
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environmentIntensity = 0.35;
     pmrem.dispose();
-    this.contenedor.appendChild(this.renderer.domElement);
+    this.container.appendChild(this.renderer.domElement);
 
-    this.etiquetas = new CSS2DRenderer();
-    this.etiquetas.setSize(w, h);
-    Object.assign(this.etiquetas.domElement.style, { position: 'absolute', top: '0', pointerEvents: 'none' });
-    this.contenedor.appendChild(this.etiquetas.domElement);
+    this.labels = new CSS2DRenderer();
+    this.labels.setSize(w, h);
+    Object.assign(this.labels.domElement.style, { position: 'absolute', top: '0', pointerEvents: 'none' });
+    this.container.appendChild(this.labels.domElement);
 
-    this.controles = new OrbitControls(this.camara, this.renderer.domElement);
-    this.controles.enableDamping = true;
-    this.controles.maxPolarAngle = Math.PI * 0.47;
-    this.controles.minDistance = 20;
-    this.controles.maxDistance = 260;
-    this.controles.target.copy(VISTA_GENERAL.objetivo);
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableDamping = true;
+    this.controls.maxPolarAngle = Math.PI * 0.47;
+    this.controls.minDistance = 20;
+    this.controls.maxDistance = 260;
+    this.controls.target.copy(OVERVIEW_VIEW.goal);
 
-    this.escena.add(new THREE.HemisphereLight('#ffffff', '#8fa08a', 1.25));
-    const sol = new THREE.DirectionalLight('#fff6e8', 1.9);
-    sol.position.set(70, 120, 50);
-    sol.castShadow = true;
-    sol.shadow.mapSize.set(2048, 2048);
-    sol.shadow.bias = -0.0004;
-    Object.assign(sol.shadow.camera, { left: -110, right: 110, top: 110, bottom: -110, far: 320 });
-    this.escena.add(sol);
+    this.scene.add(new THREE.HemisphereLight('#ffffff', '#8fa08a', 1.25));
+    const sun = new THREE.DirectionalLight('#fff6e8', 1.9);
+    sun.position.set(70, 120, 50);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.bias = -0.0004;
+    Object.assign(sun.shadow.camera, { left: -110, right: 110, top: 110, bottom: -110, far: 320 });
+    this.scene.add(sun);
   }
 
-  /* ================================================================ Calles, barrio y montañas */
-  #crearEntorno() {
-    // Suelo (se vuelve translúcido al ver los sótanos)
-    this.materialSuelo = new THREE.MeshStandardMaterial({ color: '#c9cdc6', roughness: 1 });
-    const suelo = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), this.materialSuelo);
-    suelo.rotation.x = -Math.PI / 2;
-    suelo.receiveShadow = true;
-    this.escena.add(suelo);
+  /* ================================================================ Streets, neighborhood and mountains */
+  #createEnvironment() {
+    // Ground (it turns translucent when showing the basements)
+    this.groundMaterial = new THREE.MeshStandardMaterial({ color: '#c9cdc6', roughness: 1 });
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(700, 700), this.groundMaterial);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    this.scene.add(ground);
 
-    // Lote del campus
-    this.materialLote = new THREE.MeshStandardMaterial({ color: '#d9d4c8', roughness: 1 });
-    const lote = new THREE.Mesh(new THREE.PlaneGeometry(76, 82), this.materialLote);
-    lote.rotation.x = -Math.PI / 2;
-    lote.position.set(8, 0.02, -7);
-    lote.receiveShadow = true;
-    this.escena.add(lote);
-    this.suelos = [this.materialSuelo, this.materialLote];
+    // Campus lot
+    this.lotMaterial = new THREE.MeshStandardMaterial({ color: '#d9d4c8', roughness: 1 });
+    const lot = new THREE.Mesh(new THREE.PlaneGeometry(76, 82), this.lotMaterial);
+    lot.rotation.x = -Math.PI / 2;
+    lot.position.set(8, 0.02, -7);
+    lot.receiveShadow = true;
+    this.scene.add(lot);
+    this.grounds = [this.groundMaterial, this.lotMaterial];
 
-    // Calle 18 y Carrera 45
-    const asfalto = new THREE.MeshStandardMaterial({ color: '#4a4f55', roughness: 0.95 });
-    const anden = new THREE.MeshStandardMaterial({ color: '#b9b5ad', roughness: 1 });
-    this.#plano(320, 12, 0, CALLE_18_Z, asfalto, 0.04);
-    this.#plano(320, 3, 0, CALLE_18_Z - 7.5, anden, 0.06);
-    this.#plano(320, 3, 0, CALLE_18_Z + 7.5, anden, 0.06);
-    this.#plano(10, 320, CARRERA_45_X, -100, asfalto, 0.05);
-    this.#plano(2.5, 280, CARRERA_45_X - 6.2, -110, anden, 0.06);
-    this.#plano(2.5, 280, CARRERA_45_X + 6.2, -110, anden, 0.06);
-    const linea = new THREE.MeshBasicMaterial({ color: '#f2d36b' });
-    for (let x = -150; x < 160; x += 9) this.#plano(4, 0.25, x, CALLE_18_Z, linea, 0.07);
-    for (let z = -250; z < 30; z += 9) this.#plano(0.25, 4, CARRERA_45_X, z, linea, 0.07);
-    this.#etiqueta('Calle 18', new THREE.Vector3(-40, 0.5, CALLE_18_Z), 'etiqueta-calle');
-    this.#etiqueta('Carrera 45', new THREE.Vector3(CARRERA_45_X, 0.5, -70), 'etiqueta-calle');
+    // Calle 18 and Carrera 45
+    const asphalt = new THREE.MeshStandardMaterial({ color: '#4a4f55', roughness: 0.95 });
+    const sidewalk = new THREE.MeshStandardMaterial({ color: '#b9b5ad', roughness: 1 });
+    this.#floorPlan(320, 12, 0, STREET_18_Z, asphalt, 0.04);
+    this.#floorPlan(320, 3, 0, STREET_18_Z - 7.5, sidewalk, 0.06);
+    this.#floorPlan(320, 3, 0, STREET_18_Z + 7.5, sidewalk, 0.06);
+    this.#floorPlan(10, 320, AVENUE_45_X, -100, asphalt, 0.05);
+    this.#floorPlan(2.5, 280, AVENUE_45_X - 6.2, -110, sidewalk, 0.06);
+    this.#floorPlan(2.5, 280, AVENUE_45_X + 6.2, -110, sidewalk, 0.06);
+    const line = new THREE.MeshBasicMaterial({ color: '#f2d36b' });
+    for (let x = -150; x < 160; x += 9) this.#floorPlan(4, 0.25, x, STREET_18_Z, line, 0.07);
+    for (let z = -250; z < 30; z += 9) this.#floorPlan(0.25, 4, AVENUE_45_X, z, line, 0.07);
+    this.#label('Calle 18', new THREE.Vector3(-40, 0.5, STREET_18_Z), 'label-street');
+    this.#label('Carrera 45', new THREE.Vector3(AVENUE_45_X, 0.5, -70), 'label-street');
 
-    // Barrio alrededor (bloques bajos, posiciones fijas)
-    this.barrio = new THREE.Group();
-    this.escena.add(this.barrio);
-    const colores = ['#d8d2c4', '#c9c3b8', '#e2dcd0', '#bfb9ad', '#d3c6b4', '#cfd4d8'];
-    let semilla = 11;
-    const azar = () => ((semilla = (semilla * 9301 + 49297) % 233280) / 233280);
-    const casa = (x, z) => {
-      const w = 7 + azar() * 9, d = 7 + azar() * 9, h = 3 + Math.floor(azar() * 4) * 3;
+    // Surrounding neighborhood (low blocks, fixed positions)
+    this.neighborhood = new THREE.Group();
+    this.scene.add(this.neighborhood);
+    const colors = ['#d8d2c4', '#c9c3b8', '#e2dcd0', '#bfb9ad', '#d3c6b4', '#cfd4d8'];
+    let seed = 11;
+    const random = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+    const house = (x, z) => {
+      const w = 7 + random() * 9, d = 7 + random() * 9, h = 3 + Math.floor(random() * 4) * 3;
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
-        new THREE.MeshStandardMaterial({ color: colores[Math.floor(azar() * colores.length)], roughness: 0.95 }));
+        new THREE.MeshStandardMaterial({ color: colors[Math.floor(random() * colors.length)], roughness: 0.95 }));
       m.position.set(x, h / 2, z);
       m.castShadow = m.receiveShadow = true;
-      this.barrio.add(m);
+      this.neighborhood.add(m);
     };
-    for (let x = -110; x <= 120; x += 15) for (let z = CALLE_18_Z + 16; z <= 120; z += 15) casa(x + azar() * 3, z + azar() * 3);
-    for (let x = CARRERA_45_X + 15; x <= 130; x += 15) for (let z = -120; z < CALLE_18_Z - 10; z += 15) casa(x + azar() * 3, z + azar() * 3);
-    for (let x = -110; x < -36; x += 15) for (let z = -120; z < CALLE_18_Z - 10; z += 15) casa(x + azar() * 3, z + azar() * 3);
-    for (let x = -30; x < CARRERA_45_X - 12; x += 15) for (let z = -130; z < -56; z += 15) casa(x + azar() * 3, z + azar() * 3);
+    for (let x = -110; x <= 120; x += 15) for (let z = STREET_18_Z + 16; z <= 120; z += 15) house(x + random() * 3, z + random() * 3);
+    for (let x = AVENUE_45_X + 15; x <= 130; x += 15) for (let z = -120; z < STREET_18_Z - 10; z += 15) house(x + random() * 3, z + random() * 3);
+    for (let x = -110; x < -36; x += 15) for (let z = -120; z < STREET_18_Z - 10; z += 15) house(x + random() * 3, z + random() * 3);
+    for (let x = -30; x < AVENUE_45_X - 12; x += 15) for (let z = -130; z < -56; z += 15) house(x + random() * 3, z + random() * 3);
 
-    // Montañas verdes de fondo (como en las fotos del campus)
-    const verde = new THREE.MeshStandardMaterial({ color: '#7f9f6a', roughness: 1, flatShading: true });
+    // Green mountains in the background (as in the campus photos)
+    const green = new THREE.MeshStandardMaterial({ color: '#7f9f6a', roughness: 1, flatShading: true });
     [[-200, -380, 150, 55], [-20, -400, 170, 70], [170, -380, 150, 50]].forEach(([x, z, r, h]) => {
-      const m = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), verde);
+      const m = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), green);
       m.scale.set(r, h, r * 0.7);
       m.position.set(x, 0, z);
-      this.escena.add(m);
+      this.scene.add(m);
     });
 
-    // Sótanos (se muestran con el botón "Ver sótanos")
-    this.grupoSotanos = new THREE.Group();
-    this.grupoSotanos.visible = false;
-    this.escena.add(this.grupoSotanos);
+    // Basements (shown with the "Ver sótanos" button)
+    this.basementGroup = new THREE.Group();
+    this.basementGroup.visible = false;
+    this.scene.add(this.basementGroup);
   }
 
-  #plano(w, d, x, z, material, y = 0.03) {
+  #floorPlan(w, d, x, z, material, y = 0.03) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), material);
     m.rotation.x = -Math.PI / 2;
     m.position.set(x, y, z);
     m.receiveShadow = true;
-    this.escena.add(m);
+    this.scene.add(m);
     return m;
   }
 
-  #etiqueta(texto, posicion, clase = 'etiqueta-3d', padre = this.escena) {
+  #label(text, position, cssClass = 'label-3d', parent = this.scene) {
     const div = document.createElement('div');
-    div.className = clase;
-    div.textContent = texto;
+    div.className = cssClass;
+    div.textContent = text;
     const obj = new CSS2DObject(div);
-    obj.position.copy(posicion);
-    padre.add(obj);
+    obj.position.copy(position);
+    parent.add(obj);
     return div;
   }
 
-  /* ================================================================ Datos del backend */
-  cargar(edificios, lugares = []) {
-    for (const e of edificios) {
-      const lugaresDe = lugares.filter(l => l.edificioId === e.id);
-      let grupo;
-      if (e.tipo === 'EDIFICIO') grupo = this.#edificio(e, lugaresDe);
-      else if (e.tipo === 'ACCESO') grupo = this.#acceso(e);
-      else if (e.tipo === 'ZONA_VERDE') grupo = this.#sendero(e);
-      else if (e.tipo === 'BICICLETAS') grupo = this.#estacionBici(e);
-      else if (e.tipo === 'PLAZOLETA') grupo = this.#plazoletaMesas(e);
-      else grupo = this.#piso(e);
+  /* ================================================================ Backend data */
+  load(buildings, places = []) {
+    for (const e of buildings) {
+      const placesOf = places.filter(l => l.buildingId === e.id);
+      let group;
+      if (e.type === 'BUILDING') group = this.#building(e, placesOf);
+      else if (e.type === 'ENTRANCE') group = this.#entrancePavilion(e);
+      else if (e.type === 'GREEN_AREA') group = this.#trail(e);
+      else if (e.type === 'BIKE_STATION') group = this.#bikeStation(e);
+      else if (e.type === 'PLAZA') group = this.#tablesPlaza(e);
+      else group = this.#floor(e);
 
-      grupo.position.set(e.x, 0, e.z);
-      grupo.traverse(o => { o.userData.id = e.id; });
-      this.escena.add(grupo);
+      group.position.set(e.x, 0, e.z);
+      group.traverse(o => { o.userData.id = e.id; });
+      this.scene.add(group);
 
-      const altura = { EDIFICIO: e.pisos * ALTURA_PISO + 8, ACCESO: 12, BICICLETAS: 5, PLAZOLETA: 5 }[e.tipo] ?? 2;
-      const etiqueta = this.#etiqueta(e.nombre, new THREE.Vector3(0, altura, 0), 'etiqueta-3d', grupo);
+      const heightAt = { BUILDING: e.floors * FLOOR_HEIGHT + 8, ENTRANCE: 12, BIKE_STATION: 5, PLAZA: 5 }[e.type] ?? 2;
+      const label = this.#label(e.name, new THREE.Vector3(0, heightAt, 0), 'label-3d', group);
 
-      const materiales = [];
-      grupo.traverse(o => {
+      const materials = [];
+      group.traverse(o => {
         const ms = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
-        ms.forEach(m => { if (m.emissive && !materiales.includes(m)) materiales.push(m); });
+        ms.forEach(m => { if (m.emissive && !materials.includes(m)) materials.push(m); });
       });
-      this.bloques.set(e.id, { grupo, etiqueta, datos: e, materiales });
+      this.blocks.set(e.id, { group, label, data: e, materials });
     }
-    this.#sotanos(edificios.filter(e => e.tipo === 'EDIFICIO' && e.sotanos > 0), lugares);
+    this.#basements(buildings.filter(e => e.type === 'BUILDING' && e.basements > 0), places);
   }
 
-  /* ---------------------------------------------------------------- Bloques de ladrillo */
-  #edificio(e, lugares) {
-    const grupo = new THREE.Group();
-    const alto = e.pisos * ALTURA_PISO;
-    const conBahias = e.codigo === 'B';   // el Bloque B tiene bahías verticales de vidrio
-    const conCanchas = lugares.some(l => l.tipo === 'DEPORTIVO' && l.piso >= e.pisos);
+  /* ---------------------------------------------------------------- Brick blocks */
+  #building(e, places) {
+    const group = new THREE.Group();
+    const height = e.floors * FLOOR_HEIGHT;
+    const withBays = e.code === 'B';   // Block B has vertical glass bays
+    const withCourts = places.some(l => l.type === 'SPORTS' && l.floor >= e.floors);
 
-    const fachadaLarga = texturaFachada(e.ancho, e.pisos, e.color, conBahias);
-    const fachadaCorta = texturaFachada(e.profundidad, e.pisos, e.color, conBahias);
-    const lado = (tex) => new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 });
-    const techo = new THREE.MeshStandardMaterial({ color: conCanchas ? '#5d6166' : '#c8643a', roughness: 0.9 });
+    const longFacade = textureFacade(e.width, e.floors, e.color, withBays);
+    const shortFacade = textureFacade(e.depth, e.floors, e.color, withBays);
+    const side = (tex) => new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 });
+    const ceiling = new THREE.MeshStandardMaterial({ color: withCourts ? '#5d6166' : '#c8643a', roughness: 0.9 });
     const base = new THREE.MeshStandardMaterial({ color: '#6b6f73' });
-    // orden de caras en BoxGeometry: +x, -x, +y, -y, +z, -z
-    const cuerpo = new THREE.Mesh(new THREE.BoxGeometry(e.ancho, alto, e.profundidad),
-      [lado(fachadaCorta), lado(fachadaCorta), techo, base, lado(fachadaLarga), lado(fachadaLarga)]);
-    cuerpo.position.y = alto / 2;
-    cuerpo.castShadow = cuerpo.receiveShadow = true;
-    grupo.add(cuerpo);
+    // face order in BoxGeometry: +x, -x, +y, -y, +z, -z
+    const body = new THREE.Mesh(new THREE.BoxGeometry(e.width, height, e.depth),
+      [side(shortFacade), side(shortFacade), ceiling, base, side(longFacade), side(longFacade)]);
+    body.position.y = height / 2;
+    body.castShadow = body.receiveShadow = true;
+    group.add(body);
 
-    // Pretil del techo
-    const pretil = new THREE.Mesh(
-      new THREE.BoxGeometry(e.ancho + 0.4, 1.1, e.profundidad + 0.4),
+    // Roof parapet
+    const parapet = new THREE.Mesh(
+      new THREE.BoxGeometry(e.width + 0.4, 1.1, e.depth + 0.4),
       new THREE.MeshStandardMaterial({ color: e.color, roughness: 0.9 }));
-    pretil.position.y = alto + 0.55;
-    const hueco = new THREE.Mesh(new THREE.BoxGeometry(e.ancho - 0.6, 0.9, e.profundidad - 0.6), techo);
-    hueco.position.y = alto + 0.45;
-    grupo.add(pretil, hueco);
+    parapet.position.y = height + 0.55;
+    const opening = new THREE.Mesh(new THREE.BoxGeometry(e.width - 0.6, 0.9, e.depth - 0.6), ceiling);
+    opening.position.y = height + 0.45;
+    group.add(parapet, opening);
 
-    if (conCanchas) this.#canchas(grupo, e, alto + 1.2);
-    else this.#equiposTechos(grupo, e, alto + 0.95);
-    if (e.codigo === 'B') this.#entradaBloqueB(grupo, e);
-    if (e.codigo === 'A') this.#logoBloqueA(grupo, e, alto);
-    return grupo;
+    if (withCourts) this.#courts(group, e, height + 1.2);
+    else this.#roofEquipment(group, e, height + 0.95);
+    if (e.code === 'B') this.#blockBEntrance(group, e);
+    if (e.code === 'A') this.#blockALogo(group, e, height);
+    return group;
   }
 
-  /** Entrada del Bloque B sobre el sendero: puertas de vidrio, aviso y rampas con baranda. */
-  #entradaBloqueB(grupo, e) {
-    const x = -e.ancho / 2;
-    const marco = new THREE.MeshStandardMaterial({ color: '#2b2f33', metalness: 0.4 });
-    const vidrio = new THREE.MeshStandardMaterial({ color: '#7fb4c9', transparent: true, opacity: 0.55, metalness: 0.3 });
-    const puerta = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.8, 5), vidrio);
-    puerta.position.set(x - 0.05, 1.4, 0);
-    const voladizo = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.3, 7), new THREE.MeshStandardMaterial({ color: '#e9e6df' }));
-    voladizo.position.set(x - 0.8, 3.2, 0);
-    const aviso = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.8, 2.4), [
-      new THREE.MeshStandardMaterial({ map: texturaTexto('BLOQUE B', '#1f9bb0', '#ffffff', 256, 80) }), marco, marco, marco, marco, marco]);
-    aviso.rotation.y = Math.PI;
-    aviso.position.set(x - 0.12, 3.8, 0);
-    grupo.add(puerta, voladizo, aviso);
-    // Rampas a ambos lados de la puerta y muros bajos
-    const rampaMat = new THREE.MeshStandardMaterial({ color: '#cfcac1', roughness: 1 });
-    const muro = new THREE.MeshStandardMaterial({ color: '#7c7d6b' });
-    for (const lado of [-1, 1]) {
-      const rampa = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.2, 7), rampaMat);
-      rampa.position.set(x - 3, 0.35, lado * 6.2);
-      rampa.rotation.x = lado * 0.07;
-      const pretil = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1, 7.5), muro);
-      pretil.position.set(x - 4.3, 0.5, lado * 6.2);
-      const baranda = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 7.5), marco);
-      baranda.position.set(x - 4.3, 1.2, lado * 6.2);
-      grupo.add(rampa, pretil, baranda);
+  /** Entrance of Block B on the path: glass doors, sign and ramps with railings. */
+  #blockBEntrance(group, e) {
+    const x = -e.width / 2;
+    const frame = new THREE.MeshStandardMaterial({ color: '#2b2f33', metalness: 0.4 });
+    const glass = new THREE.MeshStandardMaterial({ color: '#7fb4c9', transparent: true, opacity: 0.55, metalness: 0.3 });
+    const door = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.8, 5), glass);
+    door.position.set(x - 0.05, 1.4, 0);
+    const overhang = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.3, 7), new THREE.MeshStandardMaterial({ color: '#e9e6df' }));
+    overhang.position.set(x - 0.8, 3.2, 0);
+    const notice = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.8, 2.4), [
+      new THREE.MeshStandardMaterial({ map: textureText('BLOQUE B', '#1f9bb0', '#ffffff', 256, 80) }), frame, frame, frame, frame, frame]);
+    notice.rotation.y = Math.PI;
+    notice.position.set(x - 0.12, 3.8, 0);
+    group.add(door, overhang, notice);
+    // Ramps on both sides of the door and low walls
+    const rampMaterial = new THREE.MeshStandardMaterial({ color: '#cfcac1', roughness: 1 });
+    const wall = new THREE.MeshStandardMaterial({ color: '#7c7d6b' });
+    for (const side of [-1, 1]) {
+      const ramp = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.2, 7), rampMaterial);
+      ramp.position.set(x - 3, 0.35, side * 6.2);
+      ramp.rotation.x = side * 0.07;
+      const parapet = new THREE.Mesh(new THREE.BoxGeometry(0.25, 1, 7.5), wall);
+      parapet.position.set(x - 4.3, 0.5, side * 6.2);
+      const railing = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 7.5), frame);
+      railing.position.set(x - 4.3, 1.2, side * 6.2);
+      group.add(ramp, parapet, railing);
     }
-    const plaza = new THREE.Mesh(new THREE.BoxGeometry(4, 0.12, 5), rampaMat);
+    const plaza = new THREE.Mesh(new THREE.BoxGeometry(4, 0.12, 5), rampMaterial);
     plaza.position.set(x - 2, 0.06, 0);
-    grupo.add(plaza);
+    group.add(plaza);
   }
 
-  /** Logo de la universidad en lo alto de la fachada del Bloque A que mira al sendero. */
-  #logoBloqueA(grupo, e, alto) {
+  /** University logo at the top of the Block A facade that faces the path. */
+  #blockALogo(group, e, height) {
     const logo = new THREE.Mesh(new THREE.PlaneGeometry(9, 3.1),
-      new THREE.MeshStandardMaterial({ map: texturaLogoOficial(900, 310, null, 1), transparent: true }));
-    logo.position.set(-e.ancho / 2 + 7, alto - 1.6, e.profundidad / 2 + 0.06);
-    grupo.add(logo);
+      new THREE.MeshStandardMaterial({ map: textureOfficialLogo(900, 310, null, 1), transparent: true }));
+    logo.position.set(-e.width / 2 + 7, height - 1.6, e.depth / 2 + 0.06);
+    group.add(logo);
   }
 
-  #canchas(grupo, e, y) {
-    const lineas = new THREE.LineBasicMaterial({ color: '#ffffff' });
-    const cancha = (w, d, x, color, nombre) => {
+  #courts(group, e, y) {
+    const lines = new THREE.LineBasicMaterial({ color: '#ffffff' });
+    const court = (w, d, x, color, name) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.12, d), new THREE.MeshStandardMaterial({ color, roughness: 0.8 }));
       m.position.set(x, y, 0);
       m.receiveShadow = true;
-      grupo.add(m);
-      const borde = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w - 1.2, 0.01, d - 1.2)), lineas);
-      borde.position.set(x, y + 0.08, 0);
-      const mitad = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, d - 1.2), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
-      mitad.position.set(x, y + 0.08, 0);
-      grupo.add(borde, mitad);
-      this.#etiqueta(nombre, new THREE.Vector3(x, y + 1.5, 0), 'etiqueta-mini', grupo);
+      group.add(m);
+      const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w - 1.2, 0.01, d - 1.2)), lines);
+      edge.position.set(x, y + 0.08, 0);
+      const half = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, d - 1.2), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
+      half.position.set(x, y + 0.08, 0);
+      group.add(edge, half);
+      this.#label(name, new THREE.Vector3(x, y + 1.5, 0), 'label-mini', group);
       return m;
     };
-    const sep = e.ancho * 0.24;
-    cancha(Math.min(22, e.ancho * 0.5), Math.min(14, e.profundidad - 4), -sep, '#3f9a52', 'Cancha sintética');
-    cancha(Math.min(16, e.ancho * 0.36), Math.min(9, e.profundidad - 6), sep + 2, '#d7b98a', 'Voleibol');
-    // Malla perimetral y red de voleibol
-    const malla = new THREE.Mesh(new THREE.BoxGeometry(e.ancho - 0.8, 4, e.profundidad - 0.8),
+    const sep = e.width * 0.24;
+    court(Math.min(22, e.width * 0.5), Math.min(14, e.depth - 4), -sep, '#3f9a52', 'Cancha sintética');
+    court(Math.min(16, e.width * 0.36), Math.min(9, e.depth - 6), sep + 2, '#d7b98a', 'Voleibol');
+    // Perimeter fence and volleyball net
+    const fence = new THREE.Mesh(new THREE.BoxGeometry(e.width - 0.8, 4, e.depth - 0.8),
       new THREE.MeshBasicMaterial({ color: '#2c3e50', wireframe: true, transparent: true, opacity: 0.18 }));
-    malla.position.y = y + 2;
-    const red = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1, Math.min(9, e.profundidad - 6)),
+    fence.position.y = y + 2;
+    const net = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1, Math.min(9, e.depth - 6)),
       new THREE.MeshStandardMaterial({ color: '#f5f5f5', transparent: true, opacity: 0.8 }));
-    red.position.set(sep + 2, y + 2.4, 0);
-    grupo.add(malla, red);
+    net.position.set(sep + 2, y + 2.4, 0);
+    group.add(fence, net);
   }
 
-  #equiposTechos(grupo, e, y) {
-    // Paneles solares y equipos como se ven en la vista satélite
+  #roofEquipment(group, e, y) {
+    // Solar panels and equipment as seen in the satellite view
     const panel = new THREE.MeshStandardMaterial({ color: '#273445', metalness: 0.4, roughness: 0.35 });
     for (let i = 0; i < 4; i++) for (let j = 0; j < 2; j++) {
       const p = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.15, 1.8), panel);
-      p.position.set(-e.ancho / 2 + 3 + j * 3.6, y + 0.3, -e.profundidad / 2 + 3 + i * 2.2);
+      p.position.set(-e.width / 2 + 3 + j * 3.6, y + 0.3, -e.depth / 2 + 3 + i * 2.2);
       p.rotation.z = 0.15;
-      grupo.add(p);
+      group.add(p);
     }
-    const tanque = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 1.8, 16), new THREE.MeshStandardMaterial({ color: '#3b6fb6' }));
-    tanque.position.set(e.ancho / 2 - 3, y + 0.9, e.profundidad / 2 - 4);
-    grupo.add(tanque);
+    const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 1.8, 16), new THREE.MeshStandardMaterial({ color: '#3b6fb6' }));
+    tank.position.set(e.width / 2 - 3, y + 0.9, e.depth / 2 - 4);
+    group.add(tank);
   }
 
-  /* ---------------------------------------------------------------- Pabellón de acceso */
+  /* ---------------------------------------------------------------- Entrance pavilion */
   /*
-   * Como en las fotos: una cubierta inclinada de policarbonato sobre cerchas de acero, que sube
-   * hacia la esquina del aviso de la UCC; debajo, fachadas de vidrio con afiches, un muro de
-   * madera, los locales de Comuna y Bonne Vie, la portería con torniquetes y la terraza.
+   * As in the photos: a sloped polycarbonate roof on steel trusses that rises
+   * towards the corner of the UCC sign; below it, glass facades with posters, a wooden
+   * wall, the Comuna and Bonne Vie shops, the turnstile entrance and the terrace.
    */
-  #acceso(e) {
+  #entrancePavilion(e) {
     const g = new THREE.Group();
-    const W = e.ancho, D = e.profundidad;
-    const acero = new THREE.MeshStandardMaterial({ color: '#9aa3aa', metalness: 0.6, roughness: 0.35 });
-    const vidrio = new THREE.MeshStandardMaterial({ color: '#a9c7d8', transparent: true, opacity: 0.4, roughness: 0.1, metalness: 0.3 });
-    const policarbonato = new THREE.MeshStandardMaterial({ color: '#eef2f4', transparent: true, opacity: 0.55, side: THREE.DoubleSide, roughness: 0.3 });
-    const madera = new THREE.MeshStandardMaterial({ color: '#7a3f26', roughness: 0.7 });
-    const piso = new THREE.MeshStandardMaterial({ color: '#b9b5ae', roughness: 0.9 });
+    const W = e.width, D = e.depth;
+    const steel = new THREE.MeshStandardMaterial({ color: '#9aa3aa', metalness: 0.6, roughness: 0.35 });
+    const glass = new THREE.MeshStandardMaterial({ color: '#a9c7d8', transparent: true, opacity: 0.4, roughness: 0.1, metalness: 0.3 });
+    const polycarbonate = new THREE.MeshStandardMaterial({ color: '#eef2f4', transparent: true, opacity: 0.55, side: THREE.DoubleSide, roughness: 0.3 });
+    const wood = new THREE.MeshStandardMaterial({ color: '#7a3f26', roughness: 0.7 });
+    const floor = new THREE.MeshStandardMaterial({ color: '#b9b5ae', roughness: 0.9 });
 
-    // Piso interior y plaza de ladrillo en espina de pescado al frente
-    const base = new THREE.Mesh(new THREE.BoxGeometry(W, 0.15, D), piso);
+    // Indoor floor and herringbone brick plaza in front
+    const base = new THREE.Mesh(new THREE.BoxGeometry(W, 0.15, D), floor);
     base.position.y = 0.075; base.receiveShadow = true;
     const plaza = new THREE.Mesh(new THREE.BoxGeometry(W + 10, 0.1, 6),
-      new THREE.MeshStandardMaterial({ map: texturaEspina(), roughness: 1 }));
+      new THREE.MeshStandardMaterial({ map: textureHerringbone(), roughness: 1 }));
     plaza.position.set(-2, 0.05, D / 2 + 3); plaza.receiveShadow = true;
     g.add(base, plaza);
 
-    // Cubierta inclinada: baja en el extremo occidental (5 m), alta en el aviso (10 m)
-    const altura = (x) => 5 + (x + W / 2) / W * 5;
-    const forma = new THREE.Shape();
-    forma.moveTo(-W / 2 - 1.5, altura(-W / 2 - 1.5));
-    forma.lineTo(W / 2 + 0.5, altura(W / 2 + 0.5));
-    forma.lineTo(W / 2 + 0.5, altura(W / 2 + 0.5) - 0.25);
-    forma.lineTo(-W / 2 - 1.5, altura(-W / 2 - 1.5) - 0.25);
-    forma.closePath();
-    const cubierta = new THREE.Mesh(new THREE.ExtrudeGeometry(forma, { depth: D + 3, bevelEnabled: false }), policarbonato);
-    cubierta.position.z = -D / 2 - 1;
-    cubierta.castShadow = true;
-    g.add(cubierta);
-    // Cerchas (vigas y diagonales) bajo la cubierta
+    // Sloped roof: low at the west end (5 m), high at the sign (10 m)
+    const heightAt = (x) => 5 + (x + W / 2) / W * 5;
+    const shape = new THREE.Shape();
+    shape.moveTo(-W / 2 - 1.5, heightAt(-W / 2 - 1.5));
+    shape.lineTo(W / 2 + 0.5, heightAt(W / 2 + 0.5));
+    shape.lineTo(W / 2 + 0.5, heightAt(W / 2 + 0.5) - 0.25);
+    shape.lineTo(-W / 2 - 1.5, heightAt(-W / 2 - 1.5) - 0.25);
+    shape.closePath();
+    const roof = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: D + 3, bevelEnabled: false }), polycarbonate);
+    roof.position.z = -D / 2 - 1;
+    roof.castShadow = true;
+    g.add(roof);
+    // Trusses (beams and diagonals) under the roof
     for (let x = -W / 2; x <= W / 2 + 0.01; x += W / 6) {
-      const h = altura(x);
-      const viga = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, D + 3), acero);
-      viga.position.set(x, h - 0.35, 0.5);
-      const columna = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, h, 8), acero);
-      columna.position.set(x, h / 2, D / 2 + 1);
-      g.add(viga, columna);
+      const h = heightAt(x);
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, D + 3), steel);
+      beam.position.set(x, h - 0.35, 0.5);
+      const column = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, h, 8), steel);
+      column.position.set(x, h / 2, D / 2 + 1);
+      g.add(beam, column);
       for (let z = -D / 2; z < D / 2 + 1; z += 2.4) {
-        const diag = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 2.8), acero);
+        const diag = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 2.8), steel);
         diag.position.set(x, h - 0.9, z + 1.2);
         diag.rotation.x = 0.4;
         g.add(diag);
       }
     }
     for (let z = -D / 2; z <= D / 2 + 2; z += 2.4) {
-      const correa = new THREE.Mesh(new THREE.BoxGeometry(W + 2, 0.1, 0.1), acero);
-      correa.position.set(-0.5, (altura(-W / 2) + altura(W / 2)) / 2 - 0.3, z);
-      correa.rotation.z = Math.atan2(altura(W / 2) - altura(-W / 2), W);
-      g.add(correa);
+      const belt = new THREE.Mesh(new THREE.BoxGeometry(W + 2, 0.1, 0.1), steel);
+      belt.position.set(-0.5, (heightAt(-W / 2) + heightAt(W / 2)) / 2 - 0.3, z);
+      belt.rotation.z = Math.atan2(heightAt(W / 2) - heightAt(-W / 2), W);
+      g.add(belt);
     }
 
-    // Fachada frontal: vidrio con afiches (izquierda), muro de madera inclinado, locales (derecha)
-    const afiches = new THREE.Mesh(new THREE.BoxGeometry(W * 0.42, 3.6, 0.15), [
-      vidrio, vidrio, vidrio, vidrio, new THREE.MeshStandardMaterial({ map: texturaAfiches() }), vidrio]);
-    afiches.position.set(-W / 2 + W * 0.21, 1.8, D / 2);
-    const muroMadera = new THREE.Mesh(new THREE.BoxGeometry(W * 0.16, 4.2, 0.3), madera);
-    muroMadera.position.set(-W / 2 + W * 0.5, 2.1, D / 2 - 1.5);
-    const locales = new THREE.Mesh(new THREE.BoxGeometry(W * 0.4, 3.4, 0.15), [
-      vidrio, vidrio, vidrio, vidrio, new THREE.MeshStandardMaterial({ map: texturaLocales() }), vidrio]);
-    locales.position.set(W / 2 - W * 0.2, 1.7, D / 2 - 0.5);
-    g.add(afiches, muroMadera, locales);
+    // Front facade: glass with posters (left), sloped wooden wall, shops (right)
+    const posters = new THREE.Mesh(new THREE.BoxGeometry(W * 0.42, 3.6, 0.15), [
+      glass, glass, glass, glass, new THREE.MeshStandardMaterial({ map: texturePosters() }), glass]);
+    posters.position.set(-W / 2 + W * 0.21, 1.8, D / 2);
+    const woodWall = new THREE.Mesh(new THREE.BoxGeometry(W * 0.16, 4.2, 0.3), wood);
+    woodWall.position.set(-W / 2 + W * 0.5, 2.1, D / 2 - 1.5);
+    const shops = new THREE.Mesh(new THREE.BoxGeometry(W * 0.4, 3.4, 0.15), [
+      glass, glass, glass, glass, new THREE.MeshStandardMaterial({ map: textureShops() }), glass]);
+    shops.position.set(W / 2 - W * 0.2, 1.7, D / 2 - 0.5);
+    g.add(posters, woodWall, shops);
 
-    // Gran aviso blanco de la UCC sobre los locales
-    const aviso = new THREE.Mesh(new THREE.BoxGeometry(8, 5.2, 0.4), [
-      acero, acero, acero, acero, new THREE.MeshStandardMaterial({ map: texturaLogoOficial(640, 416, '#f7f8f8', 0.86) }), acero]);
-    aviso.position.set(W / 2 - 5.2, 6.4, D / 2 - 0.2);
-    aviso.castShadow = true;
-    // Panel de oferta académica junto al aviso
-    const cartel = new THREE.Mesh(new THREE.BoxGeometry(3.4, 4.2, 0.15), [
-      acero, acero, acero, acero, new THREE.MeshStandardMaterial({ map: texturaCartelProgramas() }), acero]);
-    cartel.position.set(W / 2 - 11.2, 5.6, D / 2 - 0.4);
-    g.add(aviso, cartel);
+    // Big white UCC sign over the shops
+    const notice = new THREE.Mesh(new THREE.BoxGeometry(8, 5.2, 0.4), [
+      steel, steel, steel, steel, new THREE.MeshStandardMaterial({ map: textureOfficialLogo(640, 416, '#f7f8f8', 0.86) }), steel]);
+    notice.position.set(W / 2 - 5.2, 6.4, D / 2 - 0.2);
+    notice.castShadow = true;
+    // Academic offer panel next to the sign
+    const billboard = new THREE.Mesh(new THREE.BoxGeometry(3.4, 4.2, 0.15), [
+      steel, steel, steel, steel, new THREE.MeshStandardMaterial({ map: textureProgramsSign() }), steel]);
+    billboard.position.set(W / 2 - 11.2, 5.6, D / 2 - 0.4);
+    g.add(notice, billboard);
 
-    // Tótem con el escudo de la universidad en la plaza, mirando a la Calle 18
+    // Totem with the university shield on the plaza, facing Calle 18
     const totem = new THREE.Group();
-    const piedra = new THREE.MeshStandardMaterial({ color: '#5d6166', roughness: 0.85 });
-    const pedestal = new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.6, 1.6), piedra);
+    const stone = new THREE.MeshStandardMaterial({ color: '#5d6166', roughness: 0.85 });
+    const pedestal = new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.6, 1.6), stone);
     pedestal.position.y = 0.3;
-    const placa = new THREE.Mesh(new THREE.BoxGeometry(7, 2.6, 0.35), [
-      piedra, piedra, piedra, piedra, new THREE.MeshStandardMaterial({ map: texturaLogoOficial(1024, 380, '#ffffff', 0.92), roughness: 0.4 }), piedra]);
-    placa.position.y = 1.95;
-    pedestal.castShadow = placa.castShadow = true;
-    const jardinera = new THREE.Mesh(new THREE.BoxGeometry(8.4, 0.35, 2.4), new THREE.MeshStandardMaterial({ color: '#5f8f4a', roughness: 1 }));
-    jardinera.position.set(0, 0.18, 0.3);
-    totem.add(jardinera, pedestal, placa);
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(7, 2.6, 0.35), [
+      stone, stone, stone, stone, new THREE.MeshStandardMaterial({ map: textureOfficialLogo(1024, 380, '#ffffff', 0.92), roughness: 0.4 }), stone]);
+    plate.position.y = 1.95;
+    pedestal.castShadow = plate.castShadow = true;
+    const planter = new THREE.Mesh(new THREE.BoxGeometry(8.4, 0.35, 2.4), new THREE.MeshStandardMaterial({ color: '#5f8f4a', roughness: 1 }));
+    planter.position.set(0, 0.18, 0.3);
+    totem.add(planter, pedestal, plate);
     totem.position.set(-W / 2 + 4.5, 0, D / 2 + 4.6);
     g.add(totem);
-    this.#etiqueta('Escudo UCC · Entrada principal', new THREE.Vector3(-W / 2 + 4.5, 4, D / 2 + 4.6), 'etiqueta-mini', g);
+    this.#label('Escudo UCC · Entrada principal', new THREE.Vector3(-W / 2 + 4.5, 4, D / 2 + 4.6), 'label-mini', g);
 
-    // Portería: mesón de madera clara, torniquetes y sillas azules
-    const meson = new THREE.Mesh(new THREE.BoxGeometry(5, 1.1, 1.4), new THREE.MeshStandardMaterial({ color: '#d8c3a0' }));
-    meson.position.set(-1, 0.7, -0.5);
-    g.add(meson);
+    // Entrance desk: light wood counter, turnstiles and blue chairs
+    const worktop = new THREE.Mesh(new THREE.BoxGeometry(5, 1.1, 1.4), new THREE.MeshStandardMaterial({ color: '#d8c3a0' }));
+    worktop.position.set(-1, 0.7, -0.5);
+    g.add(worktop);
     for (let i = 0; i < 3; i++) {
-      const t = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1, 1.1), acero);
+      const t = new THREE.Mesh(new THREE.BoxGeometry(0.35, 1, 1.1), steel);
       t.position.set(-3.5 + i * 1.2, 0.65, 1.8);
       g.add(t);
     }
-    const sillas = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 3), new THREE.MeshStandardMaterial({ color: '#2f4fa3' }));
-    sillas.position.set(-W / 2 + 1.2, 0.5, 0);
-    g.add(sillas);
+    const chairs = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 3), new THREE.MeshStandardMaterial({ color: '#2f4fa3' }));
+    chairs.position.set(-W / 2 + 1.2, 0.5, 0);
+    g.add(chairs);
 
-    // Terraza de Bonne Vie con mesas y parasoles
-    for (let i = 0; i < 3; i++) g.add(mesa(W / 2 + 2.2, D / 2 - 2 - i * 3, i === 1));
-    // Rampa de adoquín ecológico al costado
-    const rampa = new THREE.Mesh(new THREE.BoxGeometry(5, 0.12, D + 4),
-      new THREE.MeshStandardMaterial({ map: texturaAdoquinGrama(), roughness: 1 }));
-    rampa.position.set(W / 2 + 2.5, 0.04, -1);
-    rampa.receiveShadow = true;
-    g.add(rampa);
+    // Bonne Vie terrace with tables and umbrellas
+    for (let i = 0; i < 3; i++) g.add(table(W / 2 + 2.2, D / 2 - 2 - i * 3, i === 1));
+    // Ecological paver ramp on the side
+    const ramp = new THREE.Mesh(new THREE.BoxGeometry(5, 0.12, D + 4),
+      new THREE.MeshStandardMaterial({ map: textureGrassPavers(), roughness: 1 }));
+    ramp.position.set(W / 2 + 2.5, 0.04, -1);
+    ramp.receiveShadow = true;
+    g.add(ramp);
     return g;
   }
 
-  /* ---------------------------------------------------------------- Sendero de los cipreses */
-  #sendero(e) {
+  /* ---------------------------------------------------------------- Cypress path */
+  #trail(e) {
     const g = new THREE.Group();
-    const L = e.profundidad;
-    const tablero = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.14, L),
-      new THREE.MeshStandardMaterial({ map: texturaBaldosaDiagonal(L), roughness: 0.9 }));
-    tablero.position.y = 0.07; tablero.receiveShadow = true;
-    const grama = new THREE.MeshStandardMaterial({ color: '#6fa25a', roughness: 1 });
-    const franjaDer = new THREE.Mesh(new THREE.BoxGeometry(3, 0.25, L - 2), grama);
-    franjaDer.position.set(4.1, 0.12, 0);
-    const franjaIzq = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.25, L - 6), grama);
-    franjaIzq.position.set(-3.7, 0.12, 2);
-    const adoquin = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.1, L),
-      new THREE.MeshStandardMaterial({ map: texturaAdoquinGrama(), roughness: 1 }));
-    adoquin.position.set(-6.1, 0.05, 0);
-    g.add(tablero, franjaDer, franjaIzq, adoquin);
-    // Cipreses a ambos lados
+    const L = e.depth;
+    const board = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.14, L),
+      new THREE.MeshStandardMaterial({ map: textureDiagonalTile(L), roughness: 0.9 }));
+    board.position.y = 0.07; board.receiveShadow = true;
+    const grass = new THREE.MeshStandardMaterial({ color: '#6fa25a', roughness: 1 });
+    const bandRight = new THREE.Mesh(new THREE.BoxGeometry(3, 0.25, L - 2), grass);
+    bandRight.position.set(4.1, 0.12, 0);
+    const bandLeft = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.25, L - 6), grass);
+    bandLeft.position.set(-3.7, 0.12, 2);
+    const paver = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.1, L),
+      new THREE.MeshStandardMaterial({ map: textureGrassPavers(), roughness: 1 }));
+    paver.position.set(-6.1, 0.05, 0);
+    g.add(board, bandRight, bandLeft, paver);
+    // Cypresses on both sides
     for (let z = -L / 2 + 3; z < L / 2 - 1; z += 4.2) {
-      g.add(cipres(3.4, z, 7 + ((z * 7) % 3 + 3) % 3));
-      g.add(cipres(-3.3, z + 2, 6.5 + ((z * 5) % 2 + 2) % 2));
+      g.add(cypress(3.4, z, 7 + ((z * 7) % 3 + 3) % 3));
+      g.add(cypress(-3.3, z + 2, 6.5 + ((z * 5) % 2 + 2) % 2));
     }
-    // Muros de piedra de las jardineras (izquierda) y flores
-    const piedra = new THREE.MeshStandardMaterial({ color: '#6b5a50', roughness: 1, flatShading: true });
-    for (const [z, largo] of [[6, 8], [-4, 6]]) {
-      const muro = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.9, largo), piedra);
-      muro.position.set(-7.6, 0.45, z);
-      g.add(muro);
+    // Stone walls of the planters (left) and flowers
+    const stone = new THREE.MeshStandardMaterial({ color: '#6b5a50', roughness: 1, flatShading: true });
+    for (const [z, length] of [[6, 8], [-4, 6]]) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.9, length), stone);
+      wall.position.set(-7.6, 0.45, z);
+      g.add(wall);
     }
-    for (let z = -L / 2 + 2; z < L / 2 - 2; z += 2.5) g.add(flores(5.2, z));
-    // Palmas y yucas junto al Bloque B
-    for (const z of [-10, 2, 12]) g.add(palma(6.4, z));
-    // Postes de luz
-    for (const z of [-12, 0, 12]) g.add(poste(-2.9, z));
+    for (let z = -L / 2 + 2; z < L / 2 - 2; z += 2.5) g.add(flowers(5.2, z));
+    // Palms and yuccas next to Block B
+    for (const z of [-10, 2, 12]) g.add(palm(6.4, z));
+    // Lamp posts
+    for (const z of [-12, 0, 12]) g.add(post(-2.9, z));
     return g;
   }
 
-  /* ---------------------------------------------------------------- Estación UrkuBici */
-  #estacionBici(e) {
+  /* ---------------------------------------------------------------- UrkuBici station */
+  #bikeStation(e) {
     const g = new THREE.Group();
-    const piso = new THREE.Mesh(new THREE.BoxGeometry(e.ancho, 0.1, e.profundidad),
-      new THREE.MeshStandardMaterial({ map: texturaEspina(), roughness: 1 }));
-    piso.position.y = 0.05; piso.receiveShadow = true;
-    g.add(piso);
-    // Cubierta de paneles solares sobre apoyos en V
-    const negro = new THREE.MeshStandardMaterial({ color: '#2c3136', metalness: 0.5 });
-    const panel = new THREE.Mesh(new THREE.BoxGeometry(e.ancho - 2, 0.15, 4.2),
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(e.width, 0.1, e.depth),
+      new THREE.MeshStandardMaterial({ map: textureHerringbone(), roughness: 1 }));
+    floor.position.y = 0.05; floor.receiveShadow = true;
+    g.add(floor);
+    // Solar panel roof on V-shaped supports
+    const black = new THREE.MeshStandardMaterial({ color: '#2c3136', metalness: 0.5 });
+    const panel = new THREE.Mesh(new THREE.BoxGeometry(e.width - 2, 0.15, 4.2),
       new THREE.MeshStandardMaterial({ color: '#1f2e44', metalness: 0.5, roughness: 0.3 }));
     panel.position.set(0, 3.1, 0); panel.rotation.x = -0.12; panel.castShadow = true;
     g.add(panel);
-    for (const x of [-e.ancho / 2 + 2, 0, e.ancho / 2 - 2]) for (const s of [-1, 1]) {
-      const pata = new THREE.Mesh(new THREE.BoxGeometry(0.15, 3.3, 0.15), negro);
-      pata.position.set(x + s * 0.7, 1.6, 0.3); pata.rotation.z = s * 0.25;
-      g.add(pata);
+    for (const x of [-e.width / 2 + 2, 0, e.width / 2 - 2]) for (const s of [-1, 1]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.15, 3.3, 0.15), black);
+      leg.position.set(x + s * 0.7, 1.6, 0.3); leg.rotation.z = s * 0.25;
+      g.add(leg);
     }
-    // Bicicletas blancas
-    for (let i = 0; i < 10; i++) g.add(bicicleta(-e.ancho / 2 + 1.5 + i * 0.95, 0.4));
-    // Caseta de ladrillo vecina
-    const caseta = new THREE.Mesh(new THREE.BoxGeometry(4, 2.8, 5), new THREE.MeshStandardMaterial({ color: '#b0583f' }));
-    caseta.position.set(-e.ancho / 2 - 3, 1.4, 6); caseta.castShadow = true;
-    g.add(caseta);
+    // White bicycles
+    for (let i = 0; i < 10; i++) g.add(bicycle(-e.width / 2 + 1.5 + i * 0.95, 0.4));
+    // Neighboring brick booth
+    const booth = new THREE.Mesh(new THREE.BoxGeometry(4, 2.8, 5), new THREE.MeshStandardMaterial({ color: '#b0583f' }));
+    booth.position.set(-e.width / 2 - 3, 1.4, 6); booth.castShadow = true;
+    g.add(booth);
     return g;
   }
 
-  /* ---------------------------------------------------------------- Plazoleta de mesas */
-  #plazoletaMesas(e) {
+  /* ---------------------------------------------------------------- Tables plaza */
+  #tablesPlaza(e) {
     const g = new THREE.Group();
-    const piso = new THREE.Mesh(new THREE.BoxGeometry(e.ancho, 0.1, e.profundidad),
-      new THREE.MeshStandardMaterial({ map: texturaAdoquinGrama(), roughness: 1 }));
-    piso.position.y = 0.05; piso.receiveShadow = true;
-    g.add(piso);
-    for (const [x, z] of [[-3, 1], [1.5, 3.5], [3.5, -0.5]]) g.add(mesa(x, z, false));
-    // Sala de juegos: pabellón blanco con cubierta clara y ventanas angostas
-    const sala = new THREE.Mesh(new THREE.BoxGeometry(8, 3, 4.5), new THREE.MeshStandardMaterial({ color: '#f3f3f1' }));
-    sala.position.set(-1, 1.5, -e.profundidad / 2 + 2.5); sala.castShadow = true;
-    const techo = new THREE.Mesh(new THREE.BoxGeometry(8.6, 0.25, 5), new THREE.MeshStandardMaterial({ color: '#dfe3e6' }));
-    techo.position.set(-1, 3.1, -e.profundidad / 2 + 2.5);
-    const ladrillo = new THREE.Mesh(new THREE.BoxGeometry(3, 2.6, 4), new THREE.MeshStandardMaterial({ color: '#b0583f' }));
-    ladrillo.position.set(4.5, 1.3, -e.profundidad / 2 + 2.3);
-    g.add(sala, techo, ladrillo);
-    // Graderías de concreto al frente y señal de punto de encuentro
-    const concreto = new THREE.MeshStandardMaterial({ color: '#cfc9bd' });
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(e.width, 0.1, e.depth),
+      new THREE.MeshStandardMaterial({ map: textureGrassPavers(), roughness: 1 }));
+    floor.position.y = 0.05; floor.receiveShadow = true;
+    g.add(floor);
+    for (const [x, z] of [[-3, 1], [1.5, 3.5], [3.5, -0.5]]) g.add(table(x, z, false));
+    // Game room: white pavilion with a light roof and narrow windows
+    const room = new THREE.Mesh(new THREE.BoxGeometry(8, 3, 4.5), new THREE.MeshStandardMaterial({ color: '#f3f3f1' }));
+    room.position.set(-1, 1.5, -e.depth / 2 + 2.5); room.castShadow = true;
+    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(8.6, 0.25, 5), new THREE.MeshStandardMaterial({ color: '#dfe3e6' }));
+    ceiling.position.set(-1, 3.1, -e.depth / 2 + 2.5);
+    const brick = new THREE.Mesh(new THREE.BoxGeometry(3, 2.6, 4), new THREE.MeshStandardMaterial({ color: '#b0583f' }));
+    brick.position.set(4.5, 1.3, -e.depth / 2 + 2.3);
+    g.add(room, ceiling, brick);
+    // Concrete steps in front and meeting point sign
+    const concrete = new THREE.MeshStandardMaterial({ color: '#cfc9bd' });
     for (let i = 0; i < 3; i++) {
-      const grada = new THREE.Mesh(new THREE.BoxGeometry(e.ancho, 0.3 * (i + 1), 0.8), concreto);
-      grada.position.set(0, 0.15 * (i + 1), e.profundidad / 2 + 0.4 + (2 - i) * 0.8);
-      g.add(grada);
+      const step = new THREE.Mesh(new THREE.BoxGeometry(e.width, 0.3 * (i + 1), 0.8), concrete);
+      step.position.set(0, 0.15 * (i + 1), e.depth / 2 + 0.4 + (2 - i) * 0.8);
+      g.add(step);
     }
     const pe = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.05),
-      new THREE.MeshStandardMaterial({ map: texturaTexto('PE', '#2e9b4f', '#ffffff', 64, 80) }));
-    pe.position.set(e.ancho / 2 - 1, 2, 2);
-    const poste = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2, 6), new THREE.MeshStandardMaterial({ color: '#cccccc' }));
-    poste.position.set(e.ancho / 2 - 1, 1, 2);
-    g.add(pe, poste);
+      new THREE.MeshStandardMaterial({ map: textureText('PE', '#2e9b4f', '#ffffff', 64, 80) }));
+    pe.position.set(e.width / 2 - 1, 2, 2);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2, 6), new THREE.MeshStandardMaterial({ color: '#cccccc' }));
+    post.position.set(e.width / 2 - 1, 1, 2);
+    g.add(pe, post);
     return g;
   }
 
-  /* ---------------------------------------------------------------- Zona genérica */
-  #piso(e) {
+  /* ---------------------------------------------------------------- Generic area */
+  #floor(e) {
     const g = new THREE.Group();
-    const m = new THREE.Mesh(new THREE.BoxGeometry(e.ancho, 0.1, e.profundidad),
+    const m = new THREE.Mesh(new THREE.BoxGeometry(e.width, 0.1, e.depth),
       new THREE.MeshStandardMaterial({ color: e.color, roughness: 1 }));
     m.position.y = 0.05; m.receiveShadow = true;
     g.add(m);
     return g;
   }
 
-  /* ---------------------------------------------------------------- Sótanos conectados */
+  /* ---------------------------------------------------------------- Connected basements */
   /*
-   * Cada sótano es una losa translúcida; dentro se dibujan como cajas de color los recintos que
-   * la base de datos tiene en ese nivel (piso negativo), repartidos a lo largo del bloque.
+   * Each basement is a translucent slab; inside, the rooms the database has on that level
+   * (negative floor) are drawn as colored boxes, spread along the block.
    */
-  #sotanos(edificios, lugares) {
-    const losaMat = new THREE.MeshStandardMaterial({ color: '#5b84b1', transparent: true, opacity: 0.28, depthWrite: false });
-    const piso = new THREE.MeshStandardMaterial({ color: '#dfe5ec' });
-    const borde = new THREE.LineBasicMaterial({ color: '#dfe9f5' });
-    const colores = { CLINICA: '#e2574c', LABORATORIO: '#8e6cc8', OFICINA: '#3d7cc9', SERVICIO: '#2fa37a', SEGURIDAD: '#e0a526' };
-    for (const e of edificios) {
-      for (let s = 1; s <= e.sotanos; s++) {
-        const y0 = -s * SEPARACION_SOTANOS;
-        const nivel = new THREE.Mesh(new THREE.BoxGeometry(e.ancho, ALTURA_SOTANO - 0.3, e.profundidad), losaMat);
-        nivel.position.set(e.x, y0 + ALTURA_SOTANO / 2, e.z);
-        nivel.userData.id = e.id;
-        const losa = new THREE.Mesh(new THREE.BoxGeometry(e.ancho, 0.2, e.profundidad), piso);
-        losa.position.set(e.x, y0 + 0.1, e.z);
-        losa.userData.id = e.id;
-        const aristas = new THREE.LineSegments(new THREE.EdgesGeometry(nivel.geometry), borde);
-        aristas.position.copy(nivel.position);
-        this.grupoSotanos.add(nivel, losa, aristas);
+  #basements(buildings, places) {
+    const slabMaterial = new THREE.MeshStandardMaterial({ color: '#5b84b1', transparent: true, opacity: 0.28, depthWrite: false });
+    const floor = new THREE.MeshStandardMaterial({ color: '#dfe5ec' });
+    const edge = new THREE.LineBasicMaterial({ color: '#dfe9f5' });
+    const colors = { CLINIC: '#e2574c', LABORATORY: '#8e6cc8', OFFICE: '#3d7cc9', SERVICE: '#2fa37a', SAFETY: '#e0a526' };
+    for (const e of buildings) {
+      for (let s = 1; s <= e.basements; s++) {
+        const y0 = -s * BASEMENT_GAP;
+        const level = new THREE.Mesh(new THREE.BoxGeometry(e.width, BASEMENT_HEIGHT - 0.3, e.depth), slabMaterial);
+        level.position.set(e.x, y0 + BASEMENT_HEIGHT / 2, e.z);
+        level.userData.id = e.id;
+        const slab = new THREE.Mesh(new THREE.BoxGeometry(e.width, 0.2, e.depth), floor);
+        slab.position.set(e.x, y0 + 0.1, e.z);
+        slab.userData.id = e.id;
+        const edges = new THREE.LineSegments(new THREE.EdgesGeometry(level.geometry), edge);
+        edges.position.copy(level.position);
+        this.basementGroup.add(level, slab, edges);
 
-        const nombreNivel = e.codigo === 'B' && s === 1 ? 'Piso 0 (sótano 1)' : `Sótano ${s}`;
-        this.#etiqueta(`${e.nombre} · ${nombreNivel}`, new THREE.Vector3(e.x - e.ancho / 2, y0 + 3.2, e.z + e.profundidad / 2), 'etiqueta-nivel', this.grupoSotanos);
+        const levelName = e.code === 'B' && s === 1 ? 'Piso 0 (sótano 1)' : `Sótano ${s}`;
+        this.#label(`${e.name} · ${levelName}`, new THREE.Vector3(e.x - e.width / 2, y0 + 3.2, e.z + e.depth / 2), 'label-level', this.basementGroup);
 
-        // Recintos de este nivel
-        const aqui = lugares.filter(l => l.edificioId === e.id && l.piso === -s && l.tipo !== 'CIRCULACION');
-        if (!aqui.length) continue;
-        const largo = Math.max(e.ancho, e.profundidad), corto = Math.min(e.ancho, e.profundidad);
-        const aLoLargoDeZ = e.profundidad >= e.ancho;
-        const filas = aqui.length > 2 ? 2 : 1;
-        const porFila = Math.ceil(aqui.length / filas);
-        const celda = (largo - 2) / porFila, ancho = (corto - 2) / filas;
-        aqui.forEach((l, i) => {
-          const f = Math.floor(i / porFila), c = i % porFila;
-          const a = -largo / 2 + 1 + celda * (c + 0.5), b = -corto / 2 + 1 + ancho * (f + 0.5);
-          const recinto = new THREE.Mesh(
-            new THREE.BoxGeometry(aLoLargoDeZ ? ancho - 0.8 : celda - 0.8, 2, aLoLargoDeZ ? celda - 0.8 : ancho - 0.8),
-            new THREE.MeshStandardMaterial({ color: colores[l.tipo] ?? '#7d8b99', transparent: true, opacity: 0.85 }));
-          recinto.position.set(e.x + (aLoLargoDeZ ? b : a), y0 + 1.2, e.z + (aLoLargoDeZ ? a : b));
-          recinto.userData.id = e.id;
-          this.grupoSotanos.add(recinto);
-          this.#etiqueta(l.nombre.replace(' de la Clínica Odontológica', '').replace(' de la clínica', ''), recinto.position.clone().add(new THREE.Vector3(0, 1.3 + (i % 2) * 1.6, 0)), 'etiqueta-sotano', this.grupoSotanos);
+        // Rooms on this level
+        const here = places.filter(l => l.buildingId === e.id && l.floor === -s && l.type !== 'PASSAGE');
+        if (!here.length) continue;
+        const length = Math.max(e.width, e.depth), short = Math.min(e.width, e.depth);
+        const alongZ = e.depth >= e.width;
+        const rows = here.length > 2 ? 2 : 1;
+        const perRow = Math.ceil(here.length / rows);
+        const cell = (length - 2) / perRow, width = (short - 2) / rows;
+        here.forEach((l, i) => {
+          const f = Math.floor(i / perRow), c = i % perRow;
+          const a = -length / 2 + 1 + cell * (c + 0.5), b = -short / 2 + 1 + width * (f + 0.5);
+          const enclosure = new THREE.Mesh(
+            new THREE.BoxGeometry(alongZ ? width - 0.8 : cell - 0.8, 2, alongZ ? cell - 0.8 : width - 0.8),
+            new THREE.MeshStandardMaterial({ color: colors[l.type] ?? '#7d8b99', transparent: true, opacity: 0.85 }));
+          enclosure.position.set(e.x + (alongZ ? b : a), y0 + 1.2, e.z + (alongZ ? a : b));
+          enclosure.userData.id = e.id;
+          this.basementGroup.add(enclosure);
+          this.#label(l.name.replace(' de la Clínica Odontológica', '').replace(' de la clínica', ''), enclosure.position.clone().add(new THREE.Vector3(0, 1.3 + (i % 2) * 1.6, 0)), 'label-basement', this.basementGroup);
         });
       }
     }
-    // Conexión subterránea entre bloques
-    if (edificios.length >= 2) {
-      const [a, b] = edificios;
-      const yT = -SEPARACION_SOTANOS + 1.3;
-      const inicio = new THREE.Vector3(a.x, yT, a.z);
-      const fin = new THREE.Vector3(b.x, yT, b.z);
-      const largo = inicio.distanceTo(fin);
-      const tunel = new THREE.Mesh(new THREE.BoxGeometry(3, 2.4, largo), new THREE.MeshStandardMaterial({ color: '#f0b429', transparent: true, opacity: 0.6 }));
-      tunel.position.copy(inicio).lerp(fin, 0.5);
-      tunel.lookAt(fin);
-      this.grupoSotanos.add(tunel);
-      this.#etiqueta('Conexión subterránea A–B', tunel.position.clone().add(new THREE.Vector3(0, 2, 0)), 'etiqueta-sotano', this.grupoSotanos);
+    // Underground connection between blocks
+    if (buildings.length >= 2) {
+      const [a, b] = buildings;
+      const yT = -BASEMENT_GAP + 1.3;
+      const start = new THREE.Vector3(a.x, yT, a.z);
+      const end = new THREE.Vector3(b.x, yT, b.z);
+      const length = start.distanceTo(end);
+      const tunnel = new THREE.Mesh(new THREE.BoxGeometry(3, 2.4, length), new THREE.MeshStandardMaterial({ color: '#f0b429', transparent: true, opacity: 0.6 }));
+      tunnel.position.copy(start).lerp(end, 0.5);
+      tunnel.lookAt(end);
+      this.basementGroup.add(tunnel);
+      this.#label('Conexión subterránea A–B', tunnel.position.clone().add(new THREE.Vector3(0, 2, 0)), 'label-basement', this.basementGroup);
     }
   }
 
-  alternarSotanos() {
-    this.sotanosVisibles = !this.sotanosVisibles;
-    this.grupoSotanos.visible = this.sotanosVisibles;
-    this.barrio.visible = !this.sotanosVisibles;
-    this.contenedor.classList.toggle('modo-sotanos', this.sotanosVisibles);
-    for (const b of this.bloques.values())
-      if (b.datos.tipo !== 'EDIFICIO') b.grupo.visible = !this.sotanosVisibles;
-    for (const m of this.suelos) {
-      m.transparent = this.sotanosVisibles;
-      m.opacity = this.sotanosVisibles ? 0.35 : 1;
-      m.depthWrite = !this.sotanosVisibles;
+  toggleBasements() {
+    this.basementsVisible = !this.basementsVisible;
+    this.basementGroup.visible = this.basementsVisible;
+    this.neighborhood.visible = !this.basementsVisible;
+    this.container.classList.toggle('basement-mode', this.basementsVisible);
+    for (const b of this.blocks.values())
+      if (b.data.type !== 'BUILDING') b.group.visible = !this.basementsVisible;
+    for (const m of this.grounds) {
+      m.transparent = this.basementsVisible;
+      m.opacity = this.basementsVisible ? 0.35 : 1;
+      m.depthWrite = !this.basementsVisible;
       m.needsUpdate = true;
     }
-    // Los edificios se vuelven translúcidos para ver los niveles subterráneos
-    for (const b of this.bloques.values()) {
-      b.materiales.forEach(m => {
-        if (m.userData.opacidad === undefined) m.userData.opacidad = m.transparent ? m.opacity : 1;
-        m.transparent = this.sotanosVisibles || m.userData.opacidad < 1;
-        m.opacity = this.sotanosVisibles ? Math.min(0.22, m.userData.opacidad) : m.userData.opacidad;
-        m.depthWrite = !this.sotanosVisibles;
+    // Buildings turn translucent to show the underground levels
+    for (const b of this.blocks.values()) {
+      b.materials.forEach(m => {
+        if (m.userData.opacity === undefined) m.userData.opacity = m.transparent ? m.opacity : 1;
+        m.transparent = this.basementsVisible || m.userData.opacity < 1;
+        m.opacity = this.basementsVisible ? Math.min(0.22, m.userData.opacity) : m.userData.opacity;
+        m.depthWrite = !this.basementsVisible;
         m.needsUpdate = true;
       });
     }
-    this.controles.maxPolarAngle = this.sotanosVisibles ? Math.PI * 0.62 : Math.PI * 0.47;
-    if (this.sotanosVisibles) this.#volar(VISTA_SOTANOS.objetivo.clone(), VISTA_SOTANOS.camara.clone());
-    else this.vistaGeneral();
-    return this.sotanosVisibles;
+    this.controls.maxPolarAngle = this.basementsVisible ? Math.PI * 0.62 : Math.PI * 0.47;
+    if (this.basementsVisible) this.#fly(BASEMENTS_VIEW.goal.clone(), BASEMENTS_VIEW.camera.clone());
+    else this.overview();
+    return this.basementsVisible;
   }
 
-  /* ================================================================ Interacción */
-  seleccionar(id) {
-    this.deseleccionar();
-    const b = this.bloques.get(id);
+  /* ================================================================ Interaction */
+  select(id) {
+    this.deselect();
+    const b = this.blocks.get(id);
     if (!b) return;
-    this.seleccionado = id;
-    b.materiales.forEach(m => m.emissive.set('#16273d'));
-    b.etiqueta.classList.add('activa');
+    this.selected = id;
+    b.materials.forEach(m => m.emissive.set('#16273d'));
+    b.label.classList.add('current');
 
-    const d = b.datos;
-    const destino = new THREE.Vector3(d.x, d.tipo === 'EDIFICIO' ? d.pisos * ALTURA_PISO * 0.4 : 0, d.z);
-    const distancia = Math.max(d.ancho, d.profundidad, 20) * 1.9;
-    this.#volar(destino, destino.clone().add(new THREE.Vector3(distancia * 0.75, distancia * 0.8, distancia)));
+    const d = b.data;
+    const destination = new THREE.Vector3(d.x, d.type === 'BUILDING' ? d.floors * FLOOR_HEIGHT * 0.4 : 0, d.z);
+    const distance = Math.max(d.width, d.depth, 20) * 1.9;
+    this.#fly(destination, destination.clone().add(new THREE.Vector3(distance * 0.75, distance * 0.8, distance)));
   }
 
-  deseleccionar() {
-    if (!this.seleccionado) return;
-    const b = this.bloques.get(this.seleccionado);
-    b.materiales.forEach(m => m.emissive.set('#000000'));
-    b.etiqueta.classList.remove('activa');
-    this.seleccionado = null;
+  deselect() {
+    if (!this.selected) return;
+    const b = this.blocks.get(this.selected);
+    b.materials.forEach(m => m.emissive.set('#000000'));
+    b.label.classList.remove('current');
+    this.selected = null;
   }
 
-  /** Detiene el dibujo del mapa mientras se recorre un interior (ahorra batería). */
-  pausar(pausa) {
-    this.renderer.setAnimationLoop(pausa ? null : () => this.#cuadro());
+  /** Stops drawing the map while an interior is being walked (saves battery). */
+  pauseRendering(pause) {
+    this.renderer.setAnimationLoop(pause ? null : () => this.#picture());
   }
 
-  vistaGeneral() {
-    this.#volar(VISTA_GENERAL.objetivo.clone(), VISTA_GENERAL.camara.clone());
+  overview() {
+    this.#fly(OVERVIEW_VIEW.goal.clone(), OVERVIEW_VIEW.camera.clone());
   }
 
-  #volar(objetivo, camara) {
-    this.animacion = {
+  #fly(goal, camera) {
+    this.animation = {
       t: 0,
-      desdeObjetivo: this.controles.target.clone(), haciaObjetivo: objetivo,
-      desdeCamara: this.camara.position.clone(), haciaCamara: camara,
+      fromTarget: this.controls.target.clone(), towardsTarget: goal,
+      fromCamera: this.camera.position.clone(), towardsCamera: camera,
     };
   }
 
-  #eventos() {
+  #events() {
     const raycaster = new THREE.Raycaster();
-    const puntero = new THREE.Vector2();
-    let inicio = null;
+    const pointer = new THREE.Vector2();
+    let start = null;
 
-    const tocar = (ev) => {
+    const touch = (ev) => {
       const r = this.renderer.domElement.getBoundingClientRect();
-      puntero.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
-      raycaster.setFromCamera(puntero, this.camara);
-      const objetos = [...this.bloques.values()].map(b => b.grupo);
-      if (this.sotanosVisibles) objetos.push(this.grupoSotanos);
-      const hit = raycaster.intersectObjects(objetos, true).find(h => h.object.userData.id);
+      pointer.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+      raycaster.setFromCamera(pointer, this.camera);
+      const objects = [...this.blocks.values()].map(b => b.group);
+      if (this.basementsVisible) objects.push(this.basementGroup);
+      const hit = raycaster.intersectObjects(objects, true).find(h => h.object.userData.id);
       return hit ? hit.object.userData.id : null;
     };
 
-    const lienzo = this.renderer.domElement;
-    lienzo.addEventListener('pointerdown', ev => (inicio = { x: ev.clientX, y: ev.clientY }));
-    lienzo.addEventListener('pointerup', ev => {
-      if (!inicio || Math.hypot(ev.clientX - inicio.x, ev.clientY - inicio.y) > 6) return;
-      const id = tocar(ev);
-      if (id) this.alSeleccionar?.(id);
+    const canvas = this.renderer.domElement;
+    canvas.addEventListener('pointerdown', ev => (start = { x: ev.clientX, y: ev.clientY }));
+    canvas.addEventListener('pointerup', ev => {
+      if (!start || Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > 6) return;
+      const id = touch(ev);
+      if (id) this.onSelect?.(id);
     });
-    lienzo.addEventListener('pointermove', ev => {
-      lienzo.style.cursor = tocar(ev) ? 'pointer' : 'grab';
+    canvas.addEventListener('pointermove', ev => {
+      canvas.style.cursor = touch(ev) ? 'pointer' : 'grab';
     });
 
     window.addEventListener('resize', () => {
-      const { clientWidth: w, clientHeight: h } = this.contenedor;
-      this.camara.aspect = w / h;
-      this.camara.updateProjectionMatrix();
+      const { clientWidth: w, clientHeight: h } = this.container;
+      this.camera.aspect = w / h;
+      this.camera.updateProjectionMatrix();
       this.renderer.setSize(w, h);
-      this.etiquetas.setSize(w, h);
+      this.labels.setSize(w, h);
     });
   }
 
-  #cuadro() {
-    if (this.animacion) {
-      const a = this.animacion;
+  #picture() {
+    if (this.animation) {
+      const a = this.animation;
       a.t = Math.min(1, a.t + 0.022);
       const k = 1 - Math.pow(1 - a.t, 3);
-      this.controles.target.lerpVectors(a.desdeObjetivo, a.haciaObjetivo, k);
-      this.camara.position.lerpVectors(a.desdeCamara, a.haciaCamara, k);
-      if (a.t === 1) this.animacion = null;
+      this.controls.target.lerpVectors(a.fromTarget, a.towardsTarget, k);
+      this.camera.position.lerpVectors(a.fromCamera, a.towardsCamera, k);
+      if (a.t === 1) this.animation = null;
     }
-    this.controles.update();
-    this.renderer.render(this.escena, this.camara);
-    this.etiquetas.render(this.escena, this.camara);
+    this.controls.update();
+    this.renderer.render(this.scene, this.camera);
+    this.labels.render(this.scene, this.camera);
   }
 }
 
-/* ==================================================================== Texturas y vegetación */
+/* ==================================================================== Textures and vegetation */
 
-/** Fachada de ladrillo con una franja de ventanas por piso (y bahías de vidrio para el Bloque B). */
-function texturaFachada(anchoMetros, pisos, colorLadrillo, conBahias) {
-  const ppm = 12;                                   // píxeles por metro
-  const w = Math.min(1024, Math.round(anchoMetros * ppm));
-  const h = Math.round(pisos * ALTURA_PISO * ppm);
+/** Brick facade with a band of windows per floor (and glass bays for Block B). */
+function textureFacade(widthMeters, floors, brickColor, withBays) {
+  const ppm = 12;                                   // pixels per meter
+  const w = Math.min(1024, Math.round(widthMeters * ppm));
+  const h = Math.round(floors * FLOOR_HEIGHT * ppm);
   const cv = document.createElement('canvas');
   cv.width = w; cv.height = h;
   const g = cv.getContext('2d');
 
-  // Ladrillo
-  g.fillStyle = colorLadrillo;
+  // Brick
+  g.fillStyle = brickColor;
   g.fillRect(0, 0, w, h);
   g.globalAlpha = 0.12;
   for (let y = 0; y < h; y += 4) {
@@ -737,35 +737,35 @@ function texturaFachada(anchoMetros, pisos, colorLadrillo, conBahias) {
   }
   g.globalAlpha = 1;
 
-  const alturaPiso = h / pisos;
-  for (let p = 0; p < pisos; p++) {
-    const y0 = h - (p + 1) * alturaPiso;
-    // Losa
+  const floorHeight = h / floors;
+  for (let p = 0; p < floors; p++) {
+    const y0 = h - (p + 1) * floorHeight;
+    // Slab
     g.fillStyle = 'rgba(255,255,255,0.25)';
-    g.fillRect(0, y0 + alturaPiso - 3, w, 3);
-    // Ventanas: en primer piso más grandes (fachada de vidrio)
-    const alto = p === 0 ? alturaPiso * 0.62 : alturaPiso * 0.42;
-    const yv = y0 + (alturaPiso - alto) / 2;
-    const modulo = 54;
-    for (let x = 6; x < w - 20; x += modulo) {
+    g.fillRect(0, y0 + floorHeight - 3, w, 3);
+    // Windows: bigger on the first floor (glass facade)
+    const height = p === 0 ? floorHeight * 0.62 : floorHeight * 0.42;
+    const yv = y0 + (floorHeight - height) / 2;
+    const module = 54;
+    for (let x = 6; x < w - 20; x += module) {
       g.fillStyle = '#2c3d4f';
-      g.fillRect(x, yv, modulo - 14, alto);
+      g.fillRect(x, yv, module - 14, height);
       g.fillStyle = 'rgba(180,210,235,0.35)';
-      g.fillRect(x + 2, yv + 2, (modulo - 14) / 2 - 2, alto - 4);
+      g.fillRect(x + 2, yv + 2, (module - 14) / 2 - 2, height - 4);
     }
   }
-  // Bahías verticales de vidrio (Bloque B)
-  if (conBahias) {
-    const ancho = 44;
-    for (let x = 40; x < w - ancho; x += 120) {
+  // Vertical glass bays (Block B)
+  if (withBays) {
+    const width = 44;
+    for (let x = 40; x < w - width; x += 120) {
       g.fillStyle = '#354657';
-      g.fillRect(x, alturaPiso * 0.25, ancho, h - alturaPiso * 1.1);
+      g.fillRect(x, floorHeight * 0.25, width, h - floorHeight * 1.1);
       g.strokeStyle = '#8796a3';
       g.lineWidth = 2;
-      for (let y = alturaPiso * 0.25; y < h - alturaPiso; y += alturaPiso / 2) {
-        g.beginPath(); g.moveTo(x, y); g.lineTo(x + ancho, y); g.stroke();
+      for (let y = floorHeight * 0.25; y < h - floorHeight; y += floorHeight / 2) {
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + width, y); g.stroke();
       }
-      g.beginPath(); g.moveTo(x + ancho / 2, alturaPiso * 0.25); g.lineTo(x + ancho / 2, h - alturaPiso * 0.85); g.stroke();
+      g.beginPath(); g.moveTo(x + width / 2, floorHeight * 0.25); g.lineTo(x + width / 2, h - floorHeight * 0.85); g.stroke();
     }
   }
   const tex = new THREE.CanvasTexture(cv);
@@ -774,30 +774,30 @@ function texturaFachada(anchoMetros, pisos, colorLadrillo, conBahias) {
   return tex;
 }
 
-const matTronco = new THREE.MeshStandardMaterial({ color: '#8a6a48' });
-const matHoja = new THREE.MeshStandardMaterial({ color: '#4f8f45', side: THREE.DoubleSide });
-const matArbusto = new THREE.MeshStandardMaterial({ color: '#5f9a4f', flatShading: true });
+const trunkMat = new THREE.MeshStandardMaterial({ color: '#8a6a48' });
+const leafMat = new THREE.MeshStandardMaterial({ color: '#4f8f45', side: THREE.DoubleSide });
+const bushMat = new THREE.MeshStandardMaterial({ color: '#5f9a4f', flatShading: true });
 
-function palma(x, z) {
+function palm(x, z) {
   const g = new THREE.Group();
-  const tronco = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 5, 6), matTronco);
-  tronco.position.y = 2.5;
-  tronco.castShadow = true;
-  g.add(tronco);
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 5, 6), trunkMat);
+  trunk.position.y = 2.5;
+  trunk.castShadow = true;
+  g.add(trunk);
   for (let i = 0; i < 7; i++) {
-    const hoja = new THREE.Mesh(new THREE.ConeGeometry(0.35, 2.6, 4), matHoja);
-    hoja.position.y = 5;
-    hoja.rotation.set(Math.PI / 2.6, (i / 7) * Math.PI * 2, 0, 'YXZ');
-    hoja.translateY(1.2);
-    hoja.castShadow = true;
-    g.add(hoja);
+    const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.35, 2.6, 4), leafMat);
+    leaf.position.y = 5;
+    leaf.rotation.set(Math.PI / 2.6, (i / 7) * Math.PI * 2, 0, 'YXZ');
+    leaf.translateY(1.2);
+    leaf.castShadow = true;
+    g.add(leaf);
   }
   g.position.set(x, 0, z);
   return g;
 }
 
-function arbusto(x, z) {
-  const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 0), matArbusto);
+function bush(x, z) {
+  const m = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 0), bushMat);
   m.position.set(x, 0.8, z);
   m.scale.set(1.1, 0.8, 1.1);
   m.castShadow = true;
@@ -807,33 +807,33 @@ function arbusto(x, z) {
 
 
 
-/* ==================================================================== Texturas del pabellón y exteriores */
+/* ==================================================================== Textures of the pavilion and outdoors */
 
-function lienzo(w, h) {
+function canvas(w, h) {
   const cv = document.createElement('canvas');
   cv.width = w; cv.height = h;
   return [cv, cv.getContext('2d')];
 }
-function aTextura(cv, repetir) {
+function toTexture(cv, repeat) {
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
-  if (repetir) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(...repetir); }
+  if (repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(...repeat); }
   return t;
 }
 
-function texturaTexto(texto, fondo, color, w = 256, h = 80) {
-  const [cv, g] = lienzo(w, h);
-  g.fillStyle = fondo; g.fillRect(0, 0, w, h);
+function textureText(text, background, color, w = 256, h = 80) {
+  const [cv, g] = canvas(w, h);
+  g.fillStyle = background; g.fillRect(0, 0, w, h);
   g.fillStyle = color; g.font = `bold ${Math.round(h * 0.45)}px sans-serif`;
   g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText(texto, w / 2, h / 2);
-  return aTextura(cv);
+  g.fillText(text, w / 2, h / 2);
+  return toTexture(cv);
 }
 
-/** Ladrillo en espina de pescado de la plaza de entrada. */
-function texturaEspina() {
-  const [cv, g] = lienzo(128, 128);
+/** Herringbone brick of the entrance plaza. */
+function textureHerringbone() {
+  const [cv, g] = canvas(128, 128);
   g.fillStyle = '#b97a5c'; g.fillRect(0, 0, 128, 128);
   g.strokeStyle = 'rgba(80,40,25,0.35)'; g.lineWidth = 1.5;
   for (let i = -128; i < 256; i += 16) {
@@ -842,68 +842,68 @@ function texturaEspina() {
       g.strokeRect(i + j / 2 + 8, j + 8, 8, 16);
     }
   }
-  return aTextura(cv, [6, 2]);
+  return toTexture(cv, [6, 2]);
 }
 
-/** Adoquín ecológico (concreto con pasto) de rampas y plazoletas. */
-function texturaAdoquinGrama() {
-  const [cv, g] = lienzo(64, 64);
+/** Ecological paver (concrete with grass) of ramps and plazas. */
+function textureGrassPavers() {
+  const [cv, g] = canvas(64, 64);
   g.fillStyle = '#9c968c'; g.fillRect(0, 0, 64, 64);
   g.fillStyle = '#6d8f4e';
   for (let x = 4; x < 64; x += 16) for (let y = 4; y < 64; y += 16) g.fillRect(x, y, 8, 8);
-  return aTextura(cv, [6, 8]);
+  return toTexture(cv, [6, 8]);
 }
 
-/** Baldosa gris con juntas en diagonal del sendero. */
-function texturaBaldosaDiagonal(largo) {
-  const [cv, g] = lienzo(128, 128);
+/** Grey tile with diagonal joints of the path. */
+function textureDiagonalTile(length) {
+  const [cv, g] = canvas(128, 128);
   g.fillStyle = '#c9c5bf'; g.fillRect(0, 0, 128, 128);
   g.strokeStyle = 'rgba(90,90,90,0.35)'; g.lineWidth = 1.5;
   for (let i = -128; i < 256; i += 32) {
     g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 128, 128); g.stroke();
     g.beginPath(); g.moveTo(i + 128, 0); g.lineTo(i, 128); g.stroke();
   }
-  return aTextura(cv, [1, Math.round(largo / 5)]);
+  return toTexture(cv, [1, Math.round(length / 5)]);
 }
 
 /**
- * Logo oficial de la Universidad Cooperativa de Colombia (public/logo-ucc.png) sobre un
- * fondo opcional. Mientras carga la imagen se ve el fondo; después se actualiza la textura.
+ * Official logo of Universidad Cooperativa de Colombia (public/logo-ucc.png) on an
+ * optional background. While the image loads the background is shown; then the texture is updated.
  */
-function texturaLogoOficial(w, h, fondo, escala = 0.9) {
-  const [cv, g] = lienzo(w, h);
-  const tex = aTextura(cv);
-  const pintar = (img) => {
+function textureOfficialLogo(w, h, background, scale = 0.9) {
+  const [cv, g] = canvas(w, h);
+  const tex = toTexture(cv);
+  const paint = (img) => {
     g.clearRect(0, 0, w, h);
-    if (fondo) { g.fillStyle = fondo; g.fillRect(0, 0, w, h); }
+    if (background) { g.fillStyle = background; g.fillRect(0, 0, w, h); }
     if (!img) return;
-    const k = Math.min(w * escala / img.width, h * escala / img.height);
+    const k = Math.min(w * scale / img.width, h * scale / img.height);
     const iw = img.width * k, ih = img.height * k;
     g.drawImage(img, (w - iw) / 2, (h - ih) / 2, iw, ih);
     tex.needsUpdate = true;
   };
-  pintar(null);
+  paint(null);
   const img = new Image();
-  img.onload = () => pintar(img);
+  img.onload = () => paint(img);
   img.src = '/logo-ucc.png';
   return tex;
 }
 
-/** Vitrina con afiches institucionales (lado izquierdo de la entrada). */
-function texturaAfiches() {
-  const [cv, g] = lienzo(512, 160);
+/** Showcase with institutional posters (left side of the entrance). */
+function texturePosters() {
+  const [cv, g] = canvas(512, 160);
   g.fillStyle = '#2d3f4f'; g.fillRect(0, 0, 512, 160);
-  const colores = ['#f4d35e', '#5a8fb8', '#1e88a8', '#e9eef2'];
+  const colors = ['#f4d35e', '#5a8fb8', '#1e88a8', '#e9eef2'];
   for (let i = 0; i < 4; i++) {
-    g.fillStyle = colores[i]; g.fillRect(12 + i * 125, 10, 112, 140);
+    g.fillStyle = colors[i]; g.fillRect(12 + i * 125, 10, 112, 140);
     g.fillStyle = 'rgba(20,40,60,0.75)'; g.fillRect(22 + i * 125, 40, 90, 10); g.fillRect(22 + i * 125, 58, 70, 8);
   }
-  return aTextura(cv);
+  return toTexture(cv);
 }
 
-/** Locales de la entrada: Comuna (créditos) y Bonne Vie. */
-function texturaLocales() {
-  const [cv, g] = lienzo(512, 160);
+/** Entrance shops: Comuna (loans) and Bonne Vie. */
+function textureShops() {
+  const [cv, g] = canvas(512, 160);
   g.fillStyle = '#e9edef'; g.fillRect(0, 0, 512, 160);
   g.strokeStyle = '#7d8790'; g.lineWidth = 4;
   for (let x = 0; x <= 512; x += 64) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 160); g.stroke(); }
@@ -913,12 +913,12 @@ function texturaLocales() {
   g.fillStyle = '#8fd0c3'; g.font = 'bold 20px sans-serif'; g.fillText('comuna', 330, 90);
   g.fillStyle = '#2b2f33'; g.fillRect(400, 0, 112, 34);
   g.fillStyle = '#ffffff'; g.font = 'bold 18px serif'; g.fillText('BONNE VIE', 408, 24);
-  return aTextura(cv);
+  return toTexture(cv);
 }
 
-/** Cartel de oferta académica (pregrados y posgrados). */
-function texturaCartelProgramas() {
-  const [cv, g] = lienzo(170, 210);
+/** Academic offer sign (undergraduate and graduate programs). */
+function textureProgramsSign() {
+  const [cv, g] = canvas(170, 210);
   g.fillStyle = '#f2f6f4'; g.fillRect(0, 0, 170, 210);
   g.fillStyle = '#1e88b8'; g.fillRect(10, 30, 70, 14);
   g.fillStyle = '#5cb85c'; g.fillRect(92, 30, 70, 14);
@@ -927,87 +927,87 @@ function texturaCartelProgramas() {
   g.fillStyle = '#5b6770';
   for (let i = 0; i < 10; i++) { g.fillRect(12, 56 + i * 13, 50, 3); g.fillRect(94, 56 + i * 13, 54, 3); }
   g.fillStyle = '#2e8b57'; g.fillRect(0, 194, 170, 16);
-  return aTextura(cv);
+  return toTexture(cv);
 }
 
-/* ==================================================================== Mobiliario y vegetación extra */
+/* ==================================================================== Extra furniture and vegetation */
 
-const matCipres = new THREE.MeshStandardMaterial({ color: '#2f5b3b', roughness: 1, flatShading: true });
-function cipres(x, z, alto) {
+const cypressMat = new THREE.MeshStandardMaterial({ color: '#2f5b3b', roughness: 1, flatShading: true });
+function cypress(x, z, height) {
   const g = new THREE.Group();
-  const copa = new THREE.Mesh(new THREE.ConeGeometry(0.75, alto, 8), matCipres);
-  copa.position.y = alto / 2 + 0.4;
-  copa.castShadow = true;
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.6, 6), matTronco);
+  const crown = new THREE.Mesh(new THREE.ConeGeometry(0.75, height, 8), cypressMat);
+  crown.position.y = height / 2 + 0.4;
+  crown.castShadow = true;
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.6, 6), trunkMat);
   base.position.y = 0.3;
-  g.add(copa, base);
+  g.add(crown, base);
   g.position.set(x, 0, z);
   return g;
 }
 
-const matFlor = [new THREE.MeshStandardMaterial({ color: '#e05c9a' }), new THREE.MeshStandardMaterial({ color: '#f0f0f0' })];
-function flores(x, z) {
+const flowerMat = [new THREE.MeshStandardMaterial({ color: '#e05c9a' }), new THREE.MeshStandardMaterial({ color: '#f0f0f0' })];
+function flowers(x, z) {
   const g = new THREE.Group();
   for (let i = 0; i < 3; i++) {
-    const f = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 4), matFlor[i % 2]);
+    const f = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 4), flowerMat[i % 2]);
     f.position.set(x + (i - 1) * 0.5, 0.45, z + (i % 2) * 0.6);
     g.add(f);
   }
   return g;
 }
 
-const matPoste = new THREE.MeshStandardMaterial({ color: '#b8bfc4', metalness: 0.5 });
-function poste(x, z) {
+const postMat = new THREE.MeshStandardMaterial({ color: '#b8bfc4', metalness: 0.5 });
+function post(x, z) {
   const g = new THREE.Group();
-  const p = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 7, 8), matPoste);
+  const p = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 7, 8), postMat);
   p.position.y = 3.5;
-  const brazo = new THREE.Mesh(new THREE.BoxGeometry(2, 0.12, 0.25), matPoste);
-  brazo.position.set(0.8, 6.9, 0);
-  g.add(p, brazo);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(2, 0.12, 0.25), postMat);
+  arm.position.set(0.8, 6.9, 0);
+  g.add(p, arm);
   g.position.set(x, 0, z);
   return g;
 }
 
-const matMesa = new THREE.MeshStandardMaterial({ color: '#4a4f54' });
-const matSilla = new THREE.MeshStandardMaterial({ color: '#eceeee' });
-function mesa(x, z, conParasol) {
+const tableMat = new THREE.MeshStandardMaterial({ color: '#4a4f54' });
+const chairMat = new THREE.MeshStandardMaterial({ color: '#eceeee' });
+function table(x, z, withUmbrella) {
   const g = new THREE.Group();
-  const tablero = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.08, 1.2), conParasol ? matSilla : matMesa);
-  tablero.position.y = 0.75;
-  const pata = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.75, 6), matMesa);
-  pata.position.y = 0.37;
-  g.add(tablero, pata);
+  const board = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.08, 1.2), withUmbrella ? chairMat : tableMat);
+  board.position.y = 0.75;
+  const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.75, 6), tableMat);
+  leg.position.y = 0.37;
+  g.add(board, leg);
   for (const [dx, dz] of [[0.9, 0], [-0.9, 0], [0, 0.9], [0, -0.9]]) {
-    const silla = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.9, 0.5), conParasol ? matSilla : matMesa);
-    silla.position.set(dx, 0.45, dz);
-    g.add(silla);
+    const chair = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.9, 0.5), withUmbrella ? chairMat : tableMat);
+    chair.position.set(dx, 0.45, dz);
+    g.add(chair);
   }
-  if (conParasol) {
-    const asta = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.6, 6), matMesa);
-    asta.position.y = 1.3;
-    const lona = new THREE.Mesh(new THREE.ConeGeometry(1.4, 0.6, 8), new THREE.MeshStandardMaterial({ color: '#8f8a85' }));
-    lona.position.y = 2.6;
-    g.add(asta, lona);
+  if (withUmbrella) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.6, 6), tableMat);
+    pole.position.y = 1.3;
+    const canvasCover = new THREE.Mesh(new THREE.ConeGeometry(1.4, 0.6, 8), new THREE.MeshStandardMaterial({ color: '#8f8a85' }));
+    canvasCover.position.y = 2.6;
+    g.add(pole, canvasCover);
   }
   g.position.set(x, 0, z);
   return g;
 }
 
-const matBici = new THREE.MeshStandardMaterial({ color: '#f4f4f4' });
-const matRueda = new THREE.MeshStandardMaterial({ color: '#222222' });
-function bicicleta(x, z) {
+const bikeMat = new THREE.MeshStandardMaterial({ color: '#f4f4f4' });
+const wheelMat = new THREE.MeshStandardMaterial({ color: '#222222' });
+function bicycle(x, z) {
   const g = new THREE.Group();
   for (const dz of [-0.55, 0.55]) {
-    const rueda = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.04, 6, 16), matRueda);
-    rueda.rotation.y = Math.PI / 2;
-    rueda.position.set(0, 0.35, dz);
-    g.add(rueda);
+    const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.04, 6, 16), wheelMat);
+    wheel.rotation.y = Math.PI / 2;
+    wheel.position.set(0, 0.35, dz);
+    g.add(wheel);
   }
-  const cuadro = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.35, 1.1), matBici);
-  cuadro.position.y = 0.6;
-  const canasta = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.25), matBici);
-  canasta.position.set(0, 0.85, 0.6);
-  g.add(cuadro, canasta);
+  const picture = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.35, 1.1), bikeMat);
+  picture.position.y = 0.6;
+  const basket = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.25), bikeMat);
+  basket.position.set(0, 0.85, 0.6);
+  g.add(picture, basket);
   g.position.set(x, 0, z);
   return g;
 }
