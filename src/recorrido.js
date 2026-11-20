@@ -440,7 +440,8 @@ export class Kit {
 
   libre(x, z) {
     const enRampa = this.rampas.some(r => x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1);
-    const sobrePiso = enRampa || (this.rectsPiso.some(r => x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1)
+    // bordes inclusivos: justo en la unión de dos tramos de piso también se puede pisar
+    const sobrePiso = enRampa || (this.rectsPiso.some(r => x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1)
       && !this.huecos.some(h => x > h.x0 && x < h.x1 && z > h.z0 && z < h.z1));
     if (!sobrePiso) return false;
     for (const s of this.muros) if (distanciaSegmento(x, z, s) < RADIO) return false;
