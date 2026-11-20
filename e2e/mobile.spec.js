@@ -1,13 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { apiFalsa, entrarComoInvitado } from './apiFalsa.js';
+import { fakeApi, enterAsGuest } from './fakeApi.js';
 
-test('en el celular la página no se desborda y se puede hablar con Coopi', async ({ page }) => {
-  await apiFalsa(page);
-  await entrarComoInvitado(page);
-  const desborde = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  expect(desborde).toBeLessThanOrEqual(1);
-  if (!(await page.locator('#pregunta').isVisible())) await page.locator('#chat-cabecera').click();
-  await page.fill('#pregunta', 'hola');
-  await page.press('#pregunta', 'Enter');
-  await expect(page.locator('#mensajes .msg.bot').last()).toBeVisible();
+test('on a phone the page does not overflow and you can talk to Coopi', async ({ page }) => {
+  await fakeApi(page);
+  await enterAsGuest(page);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+  if (!(await page.locator('#question').isVisible())) await page.locator('#chat-header').click();
+  await page.fill('#question', 'hola');
+  await page.press('#question', 'Enter');
+  await expect(page.locator('#messages .msg.bot').last()).toBeVisible();
 });
