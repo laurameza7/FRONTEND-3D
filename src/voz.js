@@ -5,7 +5,7 @@
  *  - Síntesis (speechSynthesis) para que Coopi responda en voz alta.
  */
 const Reconocimiento = window.SpeechRecognition || window.webkitSpeechRecognition;
-const ACTIVACION = /^(?:(?:ey|oye|hey|ei|hei|ay|okey|ok|hola)\s+)?(?:coopi|copi|kopi|cupi|coopy|coopie|cooppi|kuppi|cuppy|coby|copy)\b[\s,.:]*/i;
+export const ACTIVACION = /^(?:(?:ey|oye|hey|ei|hei|ay|okey|ok|hola)\s+)?(?:coopi|copi|kopi|cupi|coopy|coopie|cooppi|kuppi|cuppy|coby|copy)\b[\s,.:]*/i;
 
 export class Voz {
   constructor({ alPreguntar, alActivarse, alEstado }) {
