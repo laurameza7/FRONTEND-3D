@@ -1,5 +1,5 @@
 import './styles.css';
-import { api } from './api.js';
+import { api, ApiError } from './api.js';
 import { Campus3D } from './campus3d.js';
 import { Walkthrough, hasInterior, destinationOfPlace, destinationInText } from './walkthrough.js';
 import { requestAccess, savedSession, logout } from './session.js';
@@ -469,9 +469,12 @@ const COMMANDS = {
   GREETING: () => {},
 };
 
+let waitingAnswer = false;   // ignores new questions while Coopi is still answering the previous one
+
 async function ask(text) {
   text = text.trim();
-  if (!text) return;
+  if (!text || waitingAnswer) return;
+  waitingAnswer = true;
   openChat();
   addMessage(text, 'user');
   $('#question').value = '';
@@ -489,9 +492,11 @@ async function ask(text) {
     else if (r.buildingId && !walkthrough.open) showBuilding(r.buildingId);
   } catch (e) {
     thinking.remove();
-    if (e.status !== 401) addMessage('No pude conectarme con el servidor. Intenta de nuevo en unos segundos.', 'bot');
+    if (e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 401) addMessage(e.message, 'bot');
+    else if (e.status !== 401) addMessage('No pude enviar tu mensaje. Revisa tu conexión o escríbelo de otra forma e intenta de nuevo.', 'bot');
   } finally {
     button.disabled = false;
+    waitingAnswer = false;
   }
 }
 
