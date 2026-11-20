@@ -27,7 +27,7 @@ const escB = (sube, baja) => ({ lado: 'izq', z0: -3, z1: 4.5, tipo: 'escaleras',
 const B2 = nivel({
   id: 2, nombre: 'Piso 2 · Salones', corto: 'Piso 2', estilo: 'B', ...B,
   salas: [
-    { lado: 'izq', z0: -15, z1: -9, tipo: 'salon', nombre: 'Salón 301', numero: '301' },
+    { lado: 'izq', z0: -15, z1: -9, tipo: 'salon', nombre: 'Salón 301', numero: '301', lugares: ['Salones 301 a 305'], claves: ['salón 301', 'salones 300'] },
     { lado: 'izq', z0: -9, z1: -3, tipo: 'salon', nombre: 'Salón 302', numero: '302' },
     escB(3, 1),
     { lado: 'izq', z0: 4.5, z1: 9.75, tipo: 'salon', nombre: 'Salón 303', numero: '303' },
@@ -180,7 +180,7 @@ const escA = (sube, baja) => ({ lado: 'izq', z0: -4, z1: 4, tipo: 'escaleras', s
 const A0 = nivel({
   id: -1, nombre: 'Piso 0 · Auditorio (sótano)', corto: 'Piso 0', estilo: 'A', ...A,
   extremos: { norte: pasoB(-2, 'paraA') },
-  destinosExtra: [desdeB],
+  destinosExtra: [{ ...desdeB, lugares: ['Conexión subterránea con el Bloque B'] }],
   salas: [
     { lado: 'izq', z0: -22, z1: -4, tipo: 'auditorio', nombre: 'Auditorio', letrero: ['Auditorio', 'Bloque A'],
       muroColor: '#c9b48f', lugares: ['Auditorio'], claves: ['auditorio del Bloque A'] },
@@ -497,7 +497,8 @@ export function nivelesB(base) {
     { id: 'esc0', nombre: 'Llegada desde el Piso 2', x: 0.75, z: -2.8, yaw: PI, oculto: true },
     { id: 'desdeA', nombre: 'Paso al Bloque A', x: 2.5, z: -10.4, yaw: PI, oculto: true }];
   s2.construir = sotano2Completo;
-  s2.destinos = [...s2.destinos, { id: 'paraA', nombre: 'Paso al Bloque A (sótano)', x: 7.5, z: 14.2, yaw: 0, oculto: true }];
+  s2.destinos = [...s2.destinos, { id: 'paraA', nombre: 'Paso al Bloque A (sótano)', x: 7.5, z: 14.2, yaw: 0, oculto: true,
+    lugares: ['Conexión subterránea con el Bloque A'] }];
   return [B7, B6, B5, B4, B3, B2, n1, n0, s2];
 }
 
