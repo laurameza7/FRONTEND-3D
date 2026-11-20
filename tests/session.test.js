@@ -1,45 +1,45 @@
 import { describe, test, expect, beforeEach } from 'vitest';
-import { huella, sesionGuardada, cerrarSesion, MAX_CLAVE, MIN_CLAVE } from '../src/sesion.js';
+import { fingerprint, savedSession, logout, MAX_PASSWORD, MIN_PASSWORD } from '../src/session.js';
 
-describe('Contraseña', () => {
-  test('la huella es SHA-256 en hexadecimal (vector oficial de "abc")', async () => {
-    expect(await huella('abc')).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+describe('Password', () => {
+  test('the fingerprint is SHA-256 in hex (official "abc" vector)', async () => {
+    expect(await fingerprint('abc')).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
   });
 
-  test('siempre tiene 64 caracteres y no contiene la contraseña', async () => {
-    for (const clave of ['123456', 'MiClave#2026', 'ñandú con tildes', 'x'.repeat(MAX_CLAVE)]) {
-      const h = await huella(clave);
+  test('it always has 64 characters and does not contain the password', async () => {
+    for (const password of ['123456', 'MiClave#2026', 'ñandú con tildes', 'x'.repeat(MAX_PASSWORD)]) {
+      const h = await fingerprint(password);
       expect(h).toMatch(/^[a-f0-9]{64}$/);
-      expect(h).not.toContain(clave);
+      expect(h).not.toContain(password);
     }
   });
 
-  test('dos contraseñas distintas dan huellas distintas', async () => {
-    expect(await huella('clave1')).not.toBe(await huella('clave2'));
+  test('two different passwords give different fingerprints', async () => {
+    expect(await fingerprint('clave1')).not.toBe(await fingerprint('clave2'));
   });
 
-  test('límites de longitud: entre 6 y 30 caracteres', () => {
-    expect(MIN_CLAVE).toBe(6);
-    expect(MAX_CLAVE).toBe(30);
+  test('length limits: between 6 and 30 characters', () => {
+    expect(MIN_PASSWORD).toBe(6);
+    expect(MAX_PASSWORD).toBe(30);
   });
 });
 
-describe('Sesión guardada en el navegador', () => {
+describe('Session saved in the browser', () => {
   beforeEach(() => localStorage.clear());
 
-  test('sin sesión devuelve null', () => {
-    expect(sesionGuardada()).toBeNull();
+  test('without a session it returns null', () => {
+    expect(savedSession()).toBeNull();
   });
 
-  test('si el valor guardado está dañado devuelve null en vez de fallar', () => {
-    localStorage.setItem('ucc3d.sesion', '{no es json');
-    expect(sesionGuardada()).toBeNull();
+  test('a corrupted saved value returns null instead of failing', () => {
+    localStorage.setItem('ucc3d.session', '{not json');
+    expect(savedSession()).toBeNull();
   });
 
-  test('cerrar sesión borra lo guardado', () => {
-    localStorage.setItem('ucc3d.sesion', JSON.stringify({ token: 't', nombre: 'Laura' }));
-    expect(sesionGuardada().nombre).toBe('Laura');
-    cerrarSesion();
-    expect(sesionGuardada()).toBeNull();
+  test('logout clears the saved session', () => {
+    localStorage.setItem('ucc3d.session', JSON.stringify({ token: 't', name: 'Laura' }));
+    expect(savedSession().name).toBe('Laura');
+    logout();
+    expect(savedSession()).toBeNull();
   });
 });
